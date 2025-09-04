@@ -166,7 +166,7 @@
       <h3 class="text-xl font-semibold text-gray-800 mb-2">
         {title}
       </h3>
-      <p class="text-gray-600">
+      <p class="text-gray-600 text-sm">
         {description}
       </p>
     </div>
