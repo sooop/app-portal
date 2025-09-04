@@ -1,5 +1,6 @@
 <script>
   import ExcelUploader from '$lib/ExcelUploader.svelte';
+  import { analyzeData, downloadExcel } from '$lib/attendance-analyzer.js';
 
   // 상태 변수들
   let file = null;
@@ -55,182 +56,9 @@
     analysis = null;
   }
 
-  // 나이 계산 함수
-  function calculateAge(birthDate) {
-    if (!birthDate) return 0;
-
-    let dateStr = birthDate.toString();
-    let year, month, day;
-
-    if (dateStr.includes('.')) {
-      [year, month, day] = dateStr.split('.').map(Number);
-    } else if (dateStr.includes('-')) {
-      [year, month, day] = dateStr.split('-').map(Number);
-    } else {
-      return 0;
-    }
-
-    const today = new Date();
-    const birth = new Date(year, month - 1, day);
-    let age = today.getFullYear() - birth.getFullYear();
-
-    if (today.getMonth() < birth.getMonth() ||
-        (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) {
-      age--;
-    }
-
-    return age;
-  }
-
-  // 연령대 분류 함수
-  function getAgeGroup(age) {
-    if (age <= 19) return '19세 이하';
-    if (age < 30) return '20대';
-    if (age < 40) return '30대';
-    if (age < 50) return '40대';
-    if (age < 60) return '50대';
-    return '60대 이상';
-  }
-
-  // 분석 실행
-  function analyzeData() {
-    if (!data) return;
-
-    // 1. 과목별 기본 분석
-    const subjectStats = {};
-
-    data.forEach(item => {
-      if (!subjectStats[item.과목명]) {
-        subjectStats[item.과목명] = {
-          수강인원: 0,
-          출석률합계: 0,
-          수료인원: 0
-        };
-      }
-
-      subjectStats[item.과목명].수강인원++;
-      subjectStats[item.과목명].출석률합계 += item.출석률;
-
-      const completionRate = subjectCompletionRates[item.과목명] || 0.7;
-      if (item.출석률 >= completionRate) {
-        subjectStats[item.과목명].수료인원++;
-      }
-    });
-
-    const subjectResults = Object.entries(subjectStats).map(([과목명, stats]) => ({
-      과목명,
-      수강인원: stats.수강인원,
-      평균출석률: (stats.출석률합계 / stats.수강인원),
-      수료인원: stats.수료인원,
-      수료율: stats.수료인원 / stats.수강인원
-    }));
-
-    // 2. 성별 분포
-    const genderStats = { 여성: 0, 남성: 0 };
-    data.forEach(item => {
-      if (item.성별 === '여성' || item.성별 === '여') {
-        genderStats.여성++;
-      } else if (item.성별 === '남성' || item.성별 === '남') {
-        genderStats.남성++;
-      }
-    });
-
-    const totalStudents = genderStats.여성 + genderStats.남성;
-    const genderDistribution = {
-      여성: { 명수: genderStats.여성, 비율: (genderStats.여성 / totalStudents * 100) },
-      남성: { 명수: genderStats.남성, 비율: (genderStats.남성 / totalStudents * 100) },
-      합계: { 명수: totalStudents, 비율: 100 }
-    };
-
-    // 3. 수강생별 강좌 수 계산 (이름, 성별, 생년월일 조합으로 동일인 판단)
-    const studentCourses = {};
-    data.forEach(item => {
-      const key = `${item.이름}_${item.성별}_${item.생년월일}`;
-      if (!studentCourses[key]) {
-        studentCourses[key] = {
-          이름: item.이름,
-          성별: item.성별,
-          생년월일: item.생년월일,
-          강좌수: 0,
-          강좌목록: []
-        };
-      }
-      studentCourses[key].강좌수++;
-      studentCourses[key].강좌목록.push(item.과목명);
-    });
-
-    const courseCountStats = { 1: 0, 2: 0, '3이상': 0 };
-    Object.values(studentCourses).forEach(student => {
-      if (student.강좌수 === 1) {
-        courseCountStats[1]++;
-      } else if (student.강좌수 === 2) {
-        courseCountStats[2]++;
-      } else {
-        courseCountStats['3이상']++;
-      }
-    });
-
-    const uniqueStudents = Object.keys(studentCourses).length;
-    const courseCountDistribution = {
-      '1강좌': { 명수: courseCountStats[1], 비율: (courseCountStats[1] / uniqueStudents * 100) },
-      '2강좌': { 명수: courseCountStats[2], 비율: (courseCountStats[2] / uniqueStudents * 100) },
-      '3강좌 이상': { 명수: courseCountStats['3이상'], 비율: (courseCountStats['3이상'] / uniqueStudents * 100) }
-    };
-
-    // 4. 연령 분포 (강좌별로 집계)
-    const ageStats = {
-      '19세 이하': 0,
-      '20대': 0,
-      '30대': 0,
-      '40대': 0,
-      '50대': 0,
-      '60대 이상': 0
-    };
-
-    data.forEach(item => {
-      const age = calculateAge(item.생년월일);
-      const ageGroup = getAgeGroup(age);
-      ageStats[ageGroup]++;
-    });
-
-    const ageDistribution = {};
-    Object.entries(ageStats).forEach(([ageGroup, count]) => {
-      ageDistribution[ageGroup] = {
-        명수: count,
-        비율: (count / totalStudents * 100)
-      };
-    });
-
-    analysis = {
-      subjectResults,
-      genderDistribution,
-      courseCountDistribution,
-      ageDistribution,
-      totalStudents,
-      uniqueStudents
-    };
-  }
-
-  // 엑셀 다운로드
-  function downloadExcel() {
-    if (!analysis) return;
-
-    const wb = window.XLSX.utils.book_new();
-
-    // 과목별 결과 시트
-    const subjectData = analysis.subjectResults.map(item => ({
-      '과목명': item.과목명,
-      '수강인원': item.수강인원,
-      '평균출석률': Math.round(item.평균출석률 * 1000) / 10, // 소수점 1자리 %
-      '수료인원': item.수료인원,
-      '수료율': Math.round(item.수료율 * 1000) / 10 // 소수점 1자리 %
-    }));
-
-    const ws = window.XLSX.utils.json_to_sheet(subjectData);
-    window.XLSX.utils.book_append_sheet(wb, ws, '과목별 분석결과');
-
-    // 파일 다운로드
-    window.XLSX.writeFile(wb, `강좌분석결과_${new Date().toISOString().split('T')[0]}.xlsx`);
+  function handleDownloadClick() {
+    // XLSX 객체는 ExcelUploader.svelte의 CDN 스크립트를 통해 전역으로 사용 가능합니다.
+    downloadExcel(analysis, window.XLSX);
   }
 
   // 과목별 수료율 변경 핸들러
@@ -241,9 +69,9 @@
     };
   }
 
-  // 수료 기준 변경 시 재분석
-  $: if (data && Object.keys(subjectCompletionRates).length > 0) {
-    analyzeData();
+  // 데이터나 수료 기준이 변경되면 자동으로 재분석
+  $: if (data) {
+    analysis = analyzeData(data, subjectCompletionRates);
   }
 </script>
 
@@ -312,7 +140,7 @@
             <h2 class="text-2xl font-bold text-gray-800">과목별 분석 결과</h2>
           </div>
           <button
-            on:click={downloadExcel}
+            on:click={handleDownloadClick}
             class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
