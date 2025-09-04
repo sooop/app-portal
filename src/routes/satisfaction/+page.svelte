@@ -1,4 +1,6 @@
 <script>
+  import ExcelUploader from '$lib/ExcelUploader.svelte';
+
 	// Icons as simple SVG strings
 	const icons = {
 		upload: `<svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>`,
@@ -10,9 +12,29 @@
 	};
 
 	let file = null;
+  let rawData = null;
 	let analyzing = false;
 	let results = null;
 	let downloadUrl = null;
+  let error = '';
+
+
+  function handleUpload(event) {
+    const { file: uploadedFile, rawData: data } = event.detail;
+    file = uploadedFile;
+    rawData = data;
+    results = null;
+    downloadUrl = null;
+    error = '';
+    // Automatically start analysis after upload
+    analyzeData();
+  }
+
+  function handleUploadError(event) {
+    error = event.detail.error;
+    results = null;
+    downloadUrl = null;
+  }
 
 	// 지역 분류 매핑
 	const regionMapping = {
@@ -40,57 +62,6 @@
 		"그렇지 않다": 2,
 		"매우 그렇지 않다": 1,
 	};
-
-	// 파일 업로드 처리
-	function handleFileUpload(event) {
-		const uploadedFile = event.target.files[0];
-		if (uploadedFile) {
-			if (!uploadedFile.name.toLowerCase().endsWith(".xlsx")) {
-				alert("Excel 파일(.xlsx)만 업로드 가능합니다.");
-				return;
-			}
-			file = uploadedFile;
-			results = null;
-			downloadUrl = null;
-		}
-	}
-
-	// 드래그 앤 드롭 처리
-	function handleDragEnter(e) {
-		e.preventDefault();
-		e.currentTarget.classList.add("border-indigo-500", "bg-indigo-50");
-	}
-
-	function handleDragOver(e) {
-		e.preventDefault();
-		e.currentTarget.classList.add("border-indigo-500", "bg-indigo-50");
-	}
-
-	function handleDragLeave(e) {
-		e.preventDefault();
-		if (!e.currentTarget.contains(e.relatedTarget)) {
-			e.currentTarget.classList.remove(
-				"border-indigo-500",
-				"bg-indigo-50",
-			);
-		}
-	}
-
-	function handleDrop(e) {
-		e.preventDefault();
-		e.currentTarget.classList.remove("border-indigo-500", "bg-indigo-50");
-		const files = Array.from(e.dataTransfer.files);
-		const excelFile = files.find((f) =>
-			f.name.toLowerCase().endsWith(".xlsx"),
-		);
-		if (excelFile) {
-			file = excelFile;
-			results = null;
-			downloadUrl = null;
-		} else {
-			alert("Excel 파일(.xlsx)만 업로드 가능합니다.");
-		}
-	}
 
 	// 텍스트 정규화 함수
 	function normalizeText(text, category) {
@@ -216,49 +187,14 @@
 
 	// 데이터 분석 및 집계
 	async function analyzeData() {
-		if (!file) return;
+		if (!rawData) return;
 
 		analyzing = true;
+    error = '';
 
 		try {
-			const arrayBuffer = await file.arrayBuffer();
-			const workbook = window.XLSX.read(arrayBuffer, { type: "array" });
-
-			const dataSheetName = workbook.SheetNames.find((name) =>
-				name.includes("원본데이터"),
-			);
-			if (!dataSheetName) {
-				alert("원본데이터 시트를 찾을 수 없습니다.");
-				return;
-			}
-
-			const worksheet = workbook.Sheets[dataSheetName];
-			const rawData = window.XLSX.utils.sheet_to_json(worksheet, {
-				header: 1,
-			});
-
-			let headerRowIndex = -1;
-			for (let i = 0; i < Math.min(20, rawData.length); i++) {
-				if (
-					rawData[i] &&
-					rawData[i].some(
-						(cell) => cell && cell.toString().includes("연번"),
-					)
-				) {
-					headerRowIndex = i;
-					break;
-				}
-			}
-
-			if (headerRowIndex === -1) {
-				alert("데이터 테이블을 찾을 수 없습니다.");
-				return;
-			}
-
-			const headers = rawData[headerRowIndex];
-			const dataRows = rawData
-				.slice(headerRowIndex + 1)
-				.filter((row) => row && row[0]);
+      const headers = Object.keys(rawData[0]);
+			const dataRows = rawData;
 
 			const columnIndexes = {
 				serialNumber: 0,
@@ -311,23 +247,24 @@
 
 			for (let i = 0; i < dataRows.length; i++) {
 				const row = dataRows[i];
-				let subject = row[columnIndexes.subject];
+        const rowAsArray = Object.values(row);
+				let subject = rowAsArray[columnIndexes.subject];
 
 				if (!subject || subject.toString().trim() === "") {
 					if (currentSubject) {
 						subject = currentSubject;
-						row[columnIndexes.subject] = currentSubject;
+						row[headers[columnIndexes.subject]] = currentSubject;
 					} else {
 						for (let j = i - 1; j >= 0; j--) {
 							const prevSubject =
-								dataRows[j][columnIndexes.subject];
+								Object.values(dataRows[j])[columnIndexes.subject];
 							if (
 								prevSubject &&
 								prevSubject.toString().trim() !== ""
 							) {
 								subject = prevSubject.toString().trim();
 								currentSubject = subject;
-								row[columnIndexes.subject] = subject;
+								row[headers[columnIndexes.subject]] = subject;
 								break;
 							}
 						}
@@ -342,7 +279,7 @@
 				if (!subjectGroups[subject]) {
 					subjectGroups[subject] = [];
 				}
-				subjectGroups[subject].push(row);
+				subjectGroups[subject].push(rowAsArray);
 			}
 
 			// 응답자 특성 정리
@@ -532,9 +469,9 @@
 
 			// Excel 파일 생성
 			await generateExcelFile(analysisResults);
-		} catch (error) {
-			console.error("분석 오류:", error);
-			alert("파일 분석 중 오류가 발생했습니다.");
+		} catch (err) {
+			console.error("분석 오류:", err);
+      error = `파일 분석 중 오류가 발생했습니다: ${err.message}`;
 		} finally {
 			analyzing = false;
 		}
@@ -727,9 +664,9 @@
 			});
 			const url = URL.createObjectURL(blob);
 			downloadUrl = url;
-		} catch (error) {
-			console.error("Excel 생성 오류:", error);
-			alert("Excel 파일 생성 중 오류가 발생했습니다.");
+		} catch (err) {
+			console.error("Excel 생성 오류:", err);
+      error = `Excel 파일 생성 중 오류가 발생했습니다: ${err.message}`;
 		}
 	}
 
@@ -746,12 +683,6 @@
 	}
 </script>
 
-<svelte:head>
-	<script
-		src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
-	></script>
-</svelte:head>
-
 <div
 	class="max-w-6xl mx-auto p-6 bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen"
 >
@@ -766,57 +697,24 @@
 			</p>
 		</div>
 
-		<!-- 파일 업로드 영역 -->
-		<div class="mb-8">
-			<div
-				class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-indigo-400 transition-colors"
-				on:dragenter={handleDragEnter}
-				on:dragover={handleDragOver}
-				on:dragleave={handleDragLeave}
-				on:drop={handleDrop}
-				role="button"
-				tabindex="0"
-			>
-				{@html icons.upload}
-				<label for="file-upload" class="cursor-pointer">
-					<span class="text-lg font-medium text-gray-700"
-						>Excel 파일을 선택하거나 드래그하세요</span
-					>
-					<input
-						id="file-upload"
-						type="file"
-						class="hidden"
-						accept=".xlsx"
-						on:change={handleFileUpload}
-					/>
-				</label>
-				<p class="text-sm text-gray-500 mt-2">지원 형식: .xlsx</p>
+    {#if !results}
+      <div class="mb-8">
+        <ExcelUploader 
+          sheetNamePattern="원본데이터"
+          headerHint="연번"
+          title="만족도 조사 결과 파일 업로드"
+          description="'원본데이터' 시트가 포함된 .xlsx 파일을 선택하거나 드래그하세요."
+          on:uploaddata={handleUpload}
+          on:error={handleUploadError}
+        />
+      </div>
+    {/if}
 
-				{#if file}
-					<div class="mt-4 p-3 bg-gray-50 rounded-lg">
-						<div class="flex items-center justify-center">
-							{@html icons.fileText}
-							<span class="text-sm font-medium text-gray-700"
-								>{file.name}</span
-							>
-						</div>
-					</div>
-				{/if}
-			</div>
-		</div>
-
-		<!-- 분석 버튼 -->
-		{#if file && !analyzing}
-			<div class="text-center mb-8">
-				<button
-					on:click={analyzeData}
-					class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-8 rounded-lg transition-colors flex items-center mx-auto"
-				>
-					{@html icons.barChart}
-					분석 시작
-				</button>
-			</div>
-		{/if}
+    {#if error}
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4 my-4 text-center">
+        <p class="text-red-700">{error}</p>
+      </div>
+    {/if}
 
 		<!-- 분석 진행 상태 -->
 		{#if analyzing}

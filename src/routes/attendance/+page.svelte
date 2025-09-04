@@ -1,9 +1,5 @@
-<svelte:head>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-</svelte:head>
-
 <script>
-  import { onMount } from 'svelte';
+  import ExcelUploader from '$lib/ExcelUploader.svelte';
 
   // 상태 변수들
   let file = null;
@@ -12,92 +8,29 @@
   let subjectCompletionRates = {}; // 과목별 수료 기준
   let analysis = null;
   let error = '';
-  let isDragOver = false;
   let showModal = false;
 
-  // DOM 참조
-  let dropZoneRef;
-  let fileInputRef;
-
-  // 파일 처리 함수
-  async function processFile(uploadedFile) {
+  function handleUpload(event) {
+    const { file: uploadedFile, rawData } = event.detail;
+    
     file = uploadedFile;
-    loading = true;
+    data = null;
+    analysis = null;
     error = '';
+    loading = true;
 
     try {
-      const buffer = await uploadedFile.arrayBuffer();
-      const workbook = window.XLSX.read(buffer, {
-        cellStyles: true,
-        cellFormulas: true,
-        cellDates: true,
-        cellNF: true,
-        sheetStubs: true
-      });
-
-      // "개인별 출석현황" 또는 "개인별출석현황" 시트 찾기
-      let sheetName = workbook.SheetNames.find(name =>
-        name.includes('개인별 출석현황') || name.includes('개인별출석현황')
-      );
-
-      if (!sheetName) {
-        throw new Error('개인별 출석현황 시트를 찾을 수 없습니다.');
-      }
-
-      const worksheet = workbook.Sheets[sheetName];
-      const range = window.XLSX.utils.decode_range(worksheet['!ref']);
-
-      // "연번" 셀 찾기
-      let dataStartRow = -1;
-      let dataStartCol = -1;
-
-      for (let row = range.s.r; row <= range.e.r; row++) {
-        for (let col = range.s.c; col <= range.e.c; col++) {
-          const cellAddress = window.XLSX.utils.encode_cell({r: row, c: col});
-          const cell = worksheet[cellAddress];
-          if (cell && cell.v && cell.v.toString().includes('연번')) {
-            dataStartRow = row;
-            dataStartCol = col;
-            break;
-          }
-        }
-        if (dataStartRow !== -1) break;
-      }
-
-      if (dataStartRow === -1) {
-        throw new Error('"연번" 헤더를 찾을 수 없습니다.');
-      }
-
-      // 데이터 추출
-      const rawData = [];
-      for (let row = dataStartRow + 1; row <= range.e.r; row++) {
-        const rowData = [];
-        let hasData = false;
-
-        for (let col = dataStartCol; col <= range.e.c; col++) {
-          const cellAddress = window.XLSX.utils.encode_cell({r: row, c: col});
-          const cell = worksheet[cellAddress];
-          const value = cell ? (cell.v || '') : '';
-          rowData.push(value);
-          if (value !== '') hasData = true;
-        }
-
-        if (hasData && rowData[0] !== '') { // 연번이 있는 행만
-          rawData.push(rowData);
-        }
-      }
-
       // 데이터 구조화
       const structuredData = rawData.map(row => ({
-        연번: row[0],
-        과목명: row[1],
-        이름: row[2],
-        성별: row[3],
-        생년월일: row[4],
-        수업일: parseInt(row[5]) || 0,
-        출석일: parseInt(row[6]) || 0,
-        출석률: parseFloat(row[7]) || 0,
-        수료여부: row[8]
+        연번: row['연번'],
+        과목명: row['과목명'],
+        이름: row['이름'],
+        성별: row['성별'],
+        생년월일: row['생년월일'],
+        수업일: parseInt(row['수업일']) || 0,
+        출석일: parseInt(row['출석일']) || 0,
+        출석률: parseFloat(row['출석률']) || 0,
+        수료여부: row['수료여부']
       })).filter(item => item.과목명 && item.이름);
 
       // 과목별 기본 수료율 설정 (70%)
@@ -109,57 +42,17 @@
       subjectCompletionRates = defaultRates;
       data = structuredData;
     } catch (err) {
-      error = '파일 처리 중 오류가 발생했습니다: ' + err.message;
+      error = '업로드된 데이터 처리 중 오류가 발생했습니다: ' + err.message;
       console.error(err);
     } finally {
       loading = false;
     }
   }
 
-  // 파일 선택 핸들러
-  async function handleFileSelect(e) {
-    const files = e.target.files;
-    if (files.length > 0) {
-      const uploadedFile = files[0];
-      if (uploadedFile.name.endsWith('.xlsx') || uploadedFile.name.endsWith('.xls')) {
-        await processFile(uploadedFile);
-      } else {
-        error = '엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.';
-      }
-    }
-  }
-
-  // 드래그앤드롭 핸들러
-  function handleDragOver(e) {
-    e.preventDefault();
-    isDragOver = true;
-  }
-
-  function handleDragLeave(e) {
-    e.preventDefault();
-    isDragOver = false;
-  }
-
-  async function handleDrop(e) {
-    e.preventDefault();
-    isDragOver = false;
-
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      const uploadedFile = files[0];
-      if (uploadedFile.name.endsWith('.xlsx') || uploadedFile.name.endsWith('.xls')) {
-        await processFile(uploadedFile);
-      } else {
-        error = '엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.';
-      }
-    }
-  }
-
-  // 드롭존 클릭 핸들러
-  function handleDropZoneClick() {
-    if (fileInputRef) {
-      fileInputRef.click();
-    }
+  function handleUploadError(event) {
+    error = event.detail.error;
+    data = null;
+    analysis = null;
   }
 
   // 나이 계산 함수
@@ -364,55 +257,20 @@
         <h1 class="text-3xl font-bold text-gray-800">수강정보분석기</h1>
       </div>
 
-      <!-- 숨겨진 파일 입력 -->
-      <input
-        bind:this={fileInputRef}
-        type="file"
-        accept=".xlsx,.xls"
-        on:change={handleFileSelect}
-        class="hidden"
-      />
-
-      <!-- 드래그앤드롭 영역 -->
       {#if !data}
-        <div
-          bind:this={dropZoneRef}
-          on:dragover={handleDragOver}
-          on:dragleave={handleDragLeave}
-          on:drop={handleDrop}
-          on:click={handleDropZoneClick}
-          class="border-2 border-dashed rounded-lg p-12 text-center transition-colors cursor-pointer {
-            isDragOver
-              ? 'border-blue-500 bg-blue-50'
-              : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
-          }"
-        >
-          <div class="space-y-4">
-            <div class="w-16 h-16 mx-auto rounded-full flex items-center justify-center {
-              isDragOver ? 'bg-blue-100' : 'bg-gray-200'
-            }">
-              <svg class="w-8 h-8 {
-                isDragOver ? 'text-blue-600' : 'text-gray-500'
-              }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-              </svg>
-            </div>
-            <div>
-              <h3 class="text-xl font-semibold text-gray-800 mb-2">
-                엑셀 파일을 드래그하거나 클릭하세요
-              </h3>
-              <p class="text-gray-600">
-                "개인별 출석현황" 시트가 포함된 .xlsx 또는 .xls 파일을 업로드하면 자동으로 분석이 시작됩니다.
-              </p>
-            </div>
-          </div>
-        </div>
+        <ExcelUploader
+          sheetNamePattern={"개인별 출석현황"}
+          headerHint={"연번"}
+          description={"'개인별 출석현황' 시트가 포함된 .xlsx 또는 .xls 파일을 업로드하면 자동으로 분석이 시작됩니다."}
+          on:uploaddata={handleUpload}
+          on:error={handleUploadError}
+        />
       {/if}
 
       {#if loading}
         <div class="flex items-center gap-2 text-blue-600 mb-4">
           <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-          파일을 처리하는 중...
+          데이터를 분석하는 중...
         </div>
       {/if}
 
