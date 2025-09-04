@@ -1,9 +1,9 @@
 <script>
 	import Link from './Link.svelte';
 	const links = [
-		{ 'link':'https://claude.ai/public/artifacts/87a7cbc4-067c-4477-b3f7-99b0be7f9894',
+		{ 'link':'/satisfaction',
 			'title':'설문응답 분석하기'},
-		{'link':'https://claude.ai/public/artifacts/d37c4bc8-d607-4a92-a885-6dc1026a2ba6',
+		{'link':'/attendance',
 			'title':'수강생 정보 분석'}
 		];
 
