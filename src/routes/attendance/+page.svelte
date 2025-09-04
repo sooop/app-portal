@@ -1,16 +1,25 @@
 <script>
   import ExcelUploader from '$lib/ExcelUploader.svelte';
   import { analyzeData, downloadExcel } from '$lib/attendance-analyzer.js';
+  import { goto } from '$app/navigation';
 
   // 상태 변수들
+  /** @type {File | null} */
   let file = null;
+  /** @type {any} */
   let data = null;
+  /** @type {boolean} */
   let loading = false;
+  /** @type {Record<string, number>} */
   let subjectCompletionRates = {}; // 과목별 수료 기준
+  /** @type {any} */
   let analysis = null;
+  /** @type {string} */
   let error = '';
+  /** @type {boolean} */
   let showModal = false;
 
+  /** @param {any} event */
   function handleUpload(event) {
     const { file: uploadedFile, rawData } = event.detail;
     
@@ -22,7 +31,7 @@
 
     try {
       // 데이터 구조화
-      const structuredData = rawData.map(row => ({
+      const structuredData = rawData.map(/** @param {any} row */ row => ({
         연번: row['연번'],
         과목명: row['과목명'],
         이름: row['이름'],
@@ -32,24 +41,26 @@
         출석일: parseInt(row['출석일']) || 0,
         출석률: parseFloat(row['출석률']) || 0,
         수료여부: row['수료여부']
-      })).filter(item => item.과목명 && item.이름);
+      })).filter(/** @param {any} item */ item => item.과목명 && item.이름);
 
       // 과목별 기본 수료율 설정 (70%)
-      const subjects = [...new Set(structuredData.map(item => item.과목명))];
+      const subjects = [...new Set(structuredData.map(/** @param {any} item */ item => item.과목명))];
+      /** @type {Record<string, number>} */
       const defaultRates = {};
-      subjects.forEach(subject => {
+      subjects.forEach(/** @param {any} subject */ subject => {
         defaultRates[subject] = 0.7;
       });
       subjectCompletionRates = defaultRates;
       data = structuredData;
     } catch (err) {
-      error = '업로드된 데이터 처리 중 오류가 발생했습니다: ' + err.message;
+      error = '업로드된 데이터 처리 중 오류가 발생했습니다: ' + (err instanceof Error ? err.message : String(err));
       console.error(err);
     } finally {
       loading = false;
     }
   }
 
+  /** @param {any} event */
   function handleUploadError(event) {
     error = event.detail.error;
     data = null;
@@ -58,15 +69,32 @@
 
   function handleDownloadClick() {
     // XLSX 객체는 ExcelUploader.svelte의 CDN 스크립트를 통해 전역으로 사용 가능합니다.
-    downloadExcel(analysis, window.XLSX);
+    downloadExcel(analysis, /** @type {any} */ (window).XLSX);
   }
 
   // 과목별 수료율 변경 핸들러
+  /**
+     * @param {string} subject
+     * @param {number} rate
+     */
   function handleCompletionRateChange(subject, rate) {
     subjectCompletionRates = {
       ...subjectCompletionRates,
       [subject]: rate
     };
+  }
+
+  // 총 수료 건수 계산 함수
+  /**
+   * @param {any} analysis
+   * @returns {number}
+   */
+  function getTotalCompletionCount(analysis) {
+    let total = 0;
+    for (const item of analysis.subjectResults) {
+      total += item.수료인원;
+    }
+    return total;
   }
 
   // 데이터나 수료 기준이 변경되면 자동으로 재분석
@@ -75,13 +103,20 @@
   }
 </script>
 
-<div class="min-h-screen p-6">
+<div class="min-h-screen p-6 relative z-[2]">
   <div class="max-w-6xl mx-auto">
-    <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+    <div class="opacity-90 bg-white rounded-lg shadow-lg p-6 mb-6">
       <div class="flex items-center gap-3 mb-6">
-        <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222"></path>
-        </svg>
+        <button 
+          onclick={() => goto('/')}
+          class="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+          title="이전 페이지로 돌아가기"
+          aria-label="이전 페이지로 돌아가기"
+        >
+          <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+          </svg>
+        </button>
         <h1 class="text-3xl text-gray-800">수강정보분석기</h1>
       </div>
 
@@ -115,7 +150,7 @@
             분석된 파일: <span class="font-medium">{file?.name}</span>
           </div>
           <button
-            on:click={() => showModal = true}
+            onclick={() => showModal = true}
             class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,7 +175,7 @@
             <h2 class="text-2xl font-bold text-gray-800">과목별 분석 결과</h2>
           </div>
           <button
-            on:click={handleDownloadClick}
+            onclick={handleDownloadClick}
             class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -267,7 +302,7 @@
           </div>
           <div class="bg-orange-50 rounded-lg p-4 text-center">
             <div class="text-2xl font-bold text-orange-600">
-              {analysis.subjectResults.reduce((sum, item) => sum + item.수료인원, 0)}
+              {getTotalCompletionCount(analysis)}
             </div>
             <div class="text-sm text-gray-600">총 수료 건수</div>
           </div>
@@ -283,8 +318,9 @@
           <div class="flex items-center justify-between p-6 border-b border-gray-200 flex-shrink-0">
             <h3 class="text-xl font-bold text-gray-800">강좌별 이수 조건 설정</h3>
             <button
-              on:click={() => showModal = false}
+              onclick={() => showModal = false}
               class="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              aria-label="모달 닫기"
             >
               <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -301,11 +337,11 @@
                     <h4 class="font-medium text-gray-800 break-words">{subject}</h4>
                   </div>
                   <div class="flex-shrink-0">
-                    <select
-                      value={Math.round(rate * 100)}
-                      on:change={(e) => handleCompletionRateChange(subject, parseInt(e.target.value) / 100)}
-                      class="px-3 py-2 border border-gray-300 rounded-md bg-white min-w-[80px]"
-                    >
+                                          <select
+                        value={Math.round(rate * 100)}
+                        onchange={(e) => handleCompletionRateChange(subject, parseInt(/** @type {HTMLSelectElement} */ (e.target).value) / 100)}
+                        class="px-3 py-2 border border-gray-300 rounded-md bg-white min-w-[80px]"
+                      >
                       {#each [30, 40, 50, 60, 70, 80, 90, 100] as percent}
                         <option value={percent}>
                           {percent}%
@@ -321,13 +357,13 @@
           <!-- 모달 푸터 - 고정 -->
           <div class="flex justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
             <button
-              on:click={() => showModal = false}
+              onclick={() => showModal = false}
               class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               닫기
             </button>
             <button
-              on:click={() => showModal = false}
+              onclick={() => showModal = false}
               class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               적용
