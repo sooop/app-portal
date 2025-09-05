@@ -85,11 +85,11 @@
     }
 
     init() {
-      if (!this.canvas || !this.ctx) return;
+      if (!this.canvas || !this.ctx || !this.canvas.parentElement) return;
 
       // 디바이스 픽셀 비율 고려
       const dpr = window.devicePixelRatio || 1;
-      const rect = this.canvas.getBoundingClientRect();
+      const rect = this.canvas.parentElement.getBoundingClientRect();
 
       this.canvas.width = rect.width * dpr;
       this.canvas.height = rect.height * dpr;
@@ -500,29 +500,14 @@
     if (!isPaused) {
       startAnimation();
     }
-
-    // ResizeObserver 사용 (더 효율적)
-    if (window.ResizeObserver) {
-      resizeObserver = new ResizeObserver(() => {
-        if (sphereInstance) {
-          sphereInstance.init();
-        }
-      });
-      resizeObserver.observe(canvas);
-    } else {
-      // 폴백: 윈도우 리사이즈 핸들러
-      const handleResize = () => {
-        if (sphereInstance) {
-          sphereInstance.init();
-        }
-      };
-      window.addEventListener('resize', handleResize);
-
-      return () => {
-        window.removeEventListener('resize', handleResize);
-      };
-    }
   });
+
+  function handleResize() {
+    console.log('Window resize event handled!');
+    if (sphereInstance) {
+      sphereInstance.init();
+    }
+  }
 
   onDestroy(() => {
     if (animationId) {
@@ -530,9 +515,6 @@
     }
     if (sphereInstance) {
       sphereInstance.destroy();
-    }
-    if (resizeObserver) {
-      resizeObserver.disconnect();
     }
   });
 
@@ -584,6 +566,8 @@
     };
   }
 </script>
+
+<svelte:window on:resize={handleResize} />
 
 <canvas
   bind:this={canvas}
