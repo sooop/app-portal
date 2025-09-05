@@ -3,14 +3,12 @@
 </svelte:head>
 
 <script>
-  import { createEventDispatcher } from 'svelte';
-
   export let sheetNamePattern = '';
   export let headerHint = '연번';
   export let title = '엑셀 파일을 드래그하거나 클릭하세요';
   export let description = '시트가 포함된 .xlsx 또는 .xls 파일을 업로드하면 자동으로 분석이 시작됩니다.';
-
-  const dispatch = createEventDispatcher();
+  export let onUpload = (/** @type {{ file: File, rawData: any[] }} */ detail) => {};
+  export let onError = (/** @type {{ error: string }} */ detail) => {};
 
   let file = null;
   let loading = false;
@@ -76,12 +74,13 @@
           range: dataStartRow
       });
 
-      dispatch('uploaddata', { file, rawData });
+      onUpload({ file, rawData });
       
     } catch (err) {
-      error = '파일 처리 중 오류가 발생했습니다: ' + err.message;
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      error = '파일 처리 중 오류가 발생했습니다: ' + errorMessage;
       console.error(err);
-      dispatch('error', { error: err.message });
+      onError({ error: errorMessage });
     } finally {
       loading = false;
     }

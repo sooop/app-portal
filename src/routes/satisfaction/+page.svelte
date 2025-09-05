@@ -29,9 +29,9 @@
   let error = '';
 
 
-  /** @param {any} event */
-  async function handleUpload(event) {
-    const { rawData } = event.detail;
+  /** @param {{ rawData: any; }} detail */
+  async function handleUpload(detail) {
+    const { rawData } = detail;
     if (!rawData) return;
 
     analyzing = true;
@@ -51,9 +51,9 @@
 	  }
   }
 
-  /** @param {any} event */
-  function handleUploadError(event) {
-    error = event.detail.error;
+  /** @param {{ error: string; }} detail */
+  function handleUploadError(detail) {
+    error = detail.error;
   }
 
 
@@ -95,8 +95,8 @@
           headerHint={"연번"}
           title={"설문 조사 결과 파일 업로드"}
           description={"'원본데이터' 시트가 포함된 .xlsx 파일을 선택하거나 드래그하세요."}
-          on:uploaddata={handleUpload}
-          on:error={handleUploadError}
+          onUpload={handleUpload}
+          onError={handleUploadError}
         />
       </div>
     {/if}

@@ -19,9 +19,9 @@
   /** @type {boolean} */
   let showModal = false;
 
-  /** @param {any} event */
-  function handleUpload(event) {
-    const { file: uploadedFile, rawData } = event.detail;
+  /** @param {{ file: File; rawData: any[]; }} detail */
+  function handleUpload(detail) {
+    const { file: uploadedFile, rawData } = detail;
     
     file = uploadedFile;
     data = null;
@@ -60,9 +60,9 @@
     }
   }
 
-  /** @param {any} event */
-  function handleUploadError(event) {
-    error = event.detail.error;
+  /** @param {{ error: string; }} detail */
+  function handleUploadError(detail) {
+    error = detail.error;
     data = null;
     analysis = null;
   }
@@ -125,8 +125,8 @@
           sheetNamePattern={"개인별 출석현황"}
           headerHint={"연번"}
           description={"'개인별 출석현황' 시트가 포함된 .xlsx 또는 .xls 파일을 업로드하면 자동으로 분석이 시작됩니다."}
-          on:uploaddata={handleUpload}
-          on:error={handleUploadError}
+          onUpload={handleUpload}
+          onError={handleUploadError}
         />
       {/if}
 
