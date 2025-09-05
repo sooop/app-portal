@@ -15,7 +15,7 @@
 	]}
 >
 	<div class="flex flex-col">
-		<h1 class="text-xl font-bold text-white">List of Applications</h1>
+		<h1 class="text-xl text-center font-bold text-white">List of Applications</h1>
 		<div class="p-4">
 			<ul>
 				{#each links as {link, title}}
