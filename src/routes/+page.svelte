@@ -1,11 +1,6 @@
 <script>
 	import Link from './Link.svelte';
-	const links = [
-		{ 'link':'/satisfaction',
-			'title':'설문응답 분석하기'},
-		{'link':'/attendance',
-			'title':'수강생 정보 분석'}
-		];
+	let { data } = $props();
 
 </script>
 <div
@@ -18,7 +13,7 @@
 		<h1 class="text-xl text-center font-bold text-white">List of Applications</h1>
 		<div class="p-4">
 			<ul>
-				{#each links as {link, title}}
+				{#each data.links as {link, title}}
 					<Link {link} {title}/>
 				{/each}
 			</ul>
