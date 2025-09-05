@@ -74,37 +74,37 @@
       this.time = 0;
       this.config = { ...config };
       this.isDestroyed = false;
-      
+
       if (!this.ctx) {
         console.error('Canvas context를 가져올 수 없습니다.');
         return;
       }
-      
+
       this.init();
       this.createPoints();
     }
 
     init() {
       if (!this.canvas || !this.ctx) return;
-      
+
       // 디바이스 픽셀 비율 고려
       const dpr = window.devicePixelRatio || 1;
       const rect = this.canvas.getBoundingClientRect();
-      
+
       this.canvas.width = rect.width * dpr;
       this.canvas.height = rect.height * dpr;
       this.ctx.scale(dpr, dpr);
-      
+
       this.canvas.style.width = rect.width + 'px';
       this.canvas.style.height = rect.height + 'px';
-      
+
       this.centerX = rect.width / 2;
       this.centerY = rect.height / 2;
     }
 
     createPoints() {
       this.points = [];
-      
+
       for (let i = 0; i < this.config.numPoints; i++) {
         this.addNewPoint();
       }
@@ -114,15 +114,15 @@
       // 랜덤한 구체 표면 위치 생성
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      
+
       const x = Math.sin(phi) * Math.cos(theta);
       const y = Math.cos(phi);
       const z = Math.sin(phi) * Math.sin(theta);
-      
+
       const now = Date.now();
-      const lifetime = this.config.particleLifetime.min + 
+      const lifetime = this.config.particleLifetime.min +
         Math.random() * (this.config.particleLifetime.max - this.config.particleLifetime.min);
-      
+
       this.points.push({
         originalX: x * this.config.sphereRadius,
         originalY: y * this.config.sphereRadius,
@@ -142,14 +142,14 @@
 
     updatePointLifecycle() {
       if (!this.config.enableLifecycle) return;
-      
+
       const now = Date.now();
       const fadeDuration = 1000; // 페이드 인/아웃 지속 시간 (ms)
-      
+
       this.points.forEach((point, index) => {
         const age = now - point.birthTime;
         const timeToDeath = point.deathTime - now;
-        
+
         // 페이드 아웃 시작
         if (timeToDeath <= fadeDuration && point.fadePhase === 'stable') {
           point.fadePhase = 'out';
@@ -170,15 +170,15 @@
       // 랜덤한 구체 표면 위치 생성
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      
+
       const x = Math.sin(phi) * Math.cos(theta);
       const y = Math.cos(phi);
       const z = Math.sin(phi) * Math.sin(theta);
-      
+
       const now = Date.now();
-      const lifetime = this.config.particleLifetime.min + 
+      const lifetime = this.config.particleLifetime.min +
         Math.random() * (this.config.particleLifetime.max - this.config.particleLifetime.min);
-      
+
       return {
         originalX: x * this.config.sphereRadius,
         originalY: y * this.config.sphereRadius,
@@ -201,42 +201,42 @@
       const sinY = Math.sin(angleY);
       const x1 = point.originalX * cosY - point.originalZ * sinY;
       const z1 = point.originalX * sinY + point.originalZ * cosY;
-      
+
       // X축 회전
       const cosX = Math.cos(angleX);
       const sinX = Math.sin(angleX);
       const y1 = point.originalY * cosX - z1 * sinX;
       const z2 = point.originalY * sinX + z1 * cosX;
-      
+
       return { x: x1, y: y1, z: z2 };
     }
 
     draw() {
       if (!this.ctx || this.isDestroyed) return;
-      
+
       // 수명 주기 업데이트
       this.updatePointLifecycle();
-      
+
       // 캔버스 완전 초기화
       if (this.canvas) {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       }
-      
+
       // 성능 최적화: 미리 계산된 점들 사용
       const rotatedPoints = this.points.map(point => {
         const rotated = this.rotatePoint(point, this.angleX, this.angleY);
-        
+
         // 시간에 따른 개별 투명도 변화
         const opacityVariation = Math.sin(this.time * point.opacitySpeed + point.opacityOffset) * 0.3;
         let baseOpacity = Math.max(0.1, Math.min(1, point.baseOpacity + opacityVariation));
-        
+
         // 수명 주기에 따른 투명도 조정
         if (this.config.enableLifecycle) {
           const now = Date.now();
           const age = now - point.birthTime;
           const timeToDeath = point.deathTime - now;
           const fadeDuration = 1000;
-          
+
           if (point.fadePhase === 'in') {
             // 페이드 인: 0에서 baseOpacity로
             const fadeProgress = Math.min(1, age / fadeDuration);
@@ -247,7 +247,7 @@
             baseOpacity *= fadeProgress;
           }
         }
-        
+
         return {
           ...point,
           ...rotated,
@@ -256,33 +256,33 @@
           screenY: this.centerY + rotated.y * ((600 + rotated.z) / 600)
         };
       });
-      
+
       // Z값으로 정렬 (성능 최적화: 필요한 경우에만)
       rotatedPoints.sort((a, b) => a.z - b.z);
-      
+
       // 배치 렌더링을 위한 설정
       this.ctx.save();
-      
+
       // 연결선 그리기 (점들보다 먼저 그려서 뒤에 오도록)
       if (this.config.enableConnections) {
         this.drawConnections(rotatedPoints);
       }
-      
+
       // 점들 그리기
       rotatedPoints.forEach(point => {
         const scale = (600 + point.z) / 600;
         const x = point.screenX;
         const y = point.screenY;
-        
+
         // 화면 경계 체크 최적화
         if (scale > 0.2 && x >= -50 && x <= (this.canvas?.width || 0) + 50 && y >= -50 && y <= (this.canvas?.height || 0) + 50) {
           const size = this.config.baseParticleSize * point.sizeMultiplier * (1 + scale);
           const opacity = point.currentOpacity * scale * 0.9;
-          
+
           const hue = this.config.particleColor.hue;
           const saturation = Math.min(100, this.config.particleColor.saturation + scale * 20);
           const lightness = Math.min(100, this.config.particleColor.lightness + scale * 30);
-          
+
           // 글로우 효과
           if (this.ctx) {
             this.ctx.beginPath();
@@ -294,7 +294,7 @@
           }
         }
       });
-      
+
       if (this.ctx) {
         this.ctx.restore();
       }
@@ -302,39 +302,39 @@
 
     drawConnections(/** @type {any[]} */ rotatedPoints) {
       if (!this.ctx || !this.config.enableConnections) return;
-      
+
       const maxDistance = this.config.connectionDistance;
       const maxOpacity = this.config.connectionOpacity;
       const maxDistanceSquared = maxDistance * maxDistance; // 제곱근 계산 최적화
-      
+
       // 성능 최적화: 거리 기반 필터링 및 공간 분할
-      const visiblePoints = rotatedPoints.filter(/** @type {any} */ point => 
+      const visiblePoints = rotatedPoints.filter(/** @type {any} */ point =>
         point.z > -500 && // 너무 멀리 있는 점들은 제외
         point.currentOpacity > 0.1
       );
-      
+
       // 성능 최적화: 너무 많은 점이 있으면 제한
       const maxConnections = 1000;
       const connectionCount = Math.min(visiblePoints.length * (visiblePoints.length - 1) / 2, maxConnections);
       let drawnConnections = 0;
-      
+
       // 연결선을 투명도 순으로 정렬하여 가장 진한 것부터 그리기
       const connections = [];
-      
+
       for (let i = 0; i < visiblePoints.length && drawnConnections < connectionCount; i++) {
         for (let j = i + 1; j < visiblePoints.length && drawnConnections < connectionCount; j++) {
           const point1 = visiblePoints[i];
           const point2 = visiblePoints[j];
-          
+
           const dx = point1.screenX - point2.screenX;
           const dy = point1.screenY - point2.screenY;
           const distanceSquared = dx * dx + dy * dy;
-          
+
           if (distanceSquared < maxDistanceSquared) {
             const distance = Math.sqrt(distanceSquared);
-            const opacity = maxOpacity * (1 - distance / maxDistance) * 
+            const opacity = maxOpacity * (1 - distance / maxDistance) *
                            Math.min(point1.currentOpacity, point2.currentOpacity);
-            
+
             if (opacity > 0.01) {
               connections.push({
                 point1,
@@ -347,18 +347,18 @@
           }
         }
       }
-      
+
       // 투명도 순으로 정렬 (진한 것부터)
       connections.sort((a, b) => b.opacity - a.opacity);
-      
+
       // 연결선 그리기
       const hue = this.config.particleColor.hue;
       const saturation = this.config.particleColor.saturation;
       const lightness = this.config.particleColor.lightness;
-      
+
       this.ctx.strokeStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
       this.ctx.lineWidth = 1;
-      
+
       connections.forEach(connection => {
         if (this.ctx) {
           this.ctx.globalAlpha = connection.opacity;
@@ -368,7 +368,7 @@
           this.ctx.stroke();
         }
       });
-      
+
       // 투명도 리셋
       if (this.ctx) {
         this.ctx.globalAlpha = 1;
@@ -377,7 +377,7 @@
 
     animate() {
       if (this.isDestroyed) return;
-      
+
       this.time += 0.0001;
       this.angleY += this.config.rotationSpeed.y;
       this.angleX += this.config.rotationSpeed.x;
@@ -386,13 +386,13 @@
 
     updateConfig(/** @type {any} */ newConfig) {
       if (this.isDestroyed) return;
-      
-      const needsRecreation = 
+
+      const needsRecreation =
         newConfig.sphereRadius !== this.config.sphereRadius ||
         newConfig.numPoints !== this.config.numPoints;
-      
+
       Object.assign(this.config, newConfig);
-      
+
       if (needsRecreation) {
         this.createPoints();
       }
@@ -455,7 +455,7 @@
 
   function startAnimation() {
     if (animationId) return;
-    
+
     function animate() {
       if (sphereInstance && !isPaused) {
         sphereInstance.animate();
@@ -517,7 +517,7 @@
         }
       };
       window.addEventListener('resize', handleResize);
-      
+
       return () => {
         window.removeEventListener('resize', handleResize);
       };
@@ -585,9 +585,9 @@
   }
 </script>
 
-<canvas 
+<canvas
   bind:this={canvas}
-  class="sphere-canvas z-[1]"
+  class="w-full h-full sphere-canvas z-[1]"
   aria-label="회전하는 3D 구체 애니메이션"
   tabindex="0"
 ></canvas>
@@ -595,21 +595,17 @@
 <style>
   .sphere-canvas {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
     background: transparent;
     pointer-events: none;
     image-rendering: -webkit-optimize-contrast;
     image-rendering: crisp-edges;
   }
-  
+
   .sphere-canvas:focus {
     outline: 2px solid rgba(255, 255, 255, 0.3);
     outline-offset: 2px;
   }
-  
+
   /* 고해상도 디스플레이 최적화 */
   @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
     .sphere-canvas {

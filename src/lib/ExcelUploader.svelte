@@ -3,17 +3,19 @@
 </svelte:head>
 
 <script>
-  export let sheetNamePattern = '';
-  export let headerHint = '연번';
-  export let title = '엑셀 파일을 드래그하거나 클릭하세요';
-  export let description = '시트가 포함된 .xlsx 또는 .xls 파일을 업로드하면 자동으로 분석이 시작됩니다.';
-  export let onUpload = (/** @type {{ file: File, rawData: any[] }} */ detail) => {};
-  export let onError = (/** @type {{ error: string }} */ detail) => {};
+	let {
+	  sheetNamePattern = '',
+	  headerHint = '연번',
+	  title = '엑셀 파일을 드래그하거나 클릭하세요',
+	  description = '시트가 포함된 .xlsx 또는 .xls 파일을 업로드하면 자동으로 분석이 시작됩니다.',
+	  onUpload = (/** @type {{ file: File, rawData: any[] }} */ detail) => {},
+		onError = (/** @type {{ error: string }} */ detail) => {}
+	} = $props();
 
   let file = null;
-  let loading = false;
-  let error = '';
-  let isDragOver = false;
+  let loading = $state(false);
+  let error = $state('');
+  let isDragOver = $state(false);
 
   let fileInputRef;
 
@@ -62,7 +64,7 @@
       if (dataStartRow === -1) {
         throw new Error(`'${headerHint}' 헤더를 찾을 수 없습니다.`);
       }
-      
+
       const header = [];
       for (let col = dataStartCol; col <= range.e.c; col++) {
           const cellAddress = window.XLSX.utils.encode_cell({r: dataStartRow, c: col});
@@ -75,7 +77,7 @@
       });
 
       onUpload({ file, rawData });
-      
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       error = '파일 처리 중 오류가 발생했습니다: ' + errorMessage;
