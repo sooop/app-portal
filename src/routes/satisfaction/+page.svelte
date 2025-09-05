@@ -31,7 +31,7 @@
 
   /** @param {any} event */
   async function handleUpload(event) {
-    const { rawData: data } = event.detail;
+    const { rawData } = event.detail;
     if (!rawData) return;
 
     analyzing = true;
@@ -75,7 +75,7 @@
 >
 	<div class="bg-white rounded-xl shadow-lg p-8">
 		<div class="flex items-center gap-3 mb-6">
-        <button 
+        <button
           onclick={() => goto('/')}
           class="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
           title="이전 페이지로 돌아가기"
@@ -90,7 +90,7 @@
 
     {#if !results && !analyzing}
       <div class="mb-8">
-        <ExcelUploader 
+        <ExcelUploader
           sheetNamePattern={"원본데이터"}
           headerHint={"연번"}
           title={"설문 조사 결과 파일 업로드"}

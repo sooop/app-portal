@@ -162,41 +162,45 @@ async function generateExcelFile(analysisResults, XLSX) {
     const respondentSheet = XLSX.utils.aoa_to_sheet(respondentData);
     XLSX.utils.book_append_sheet(workbook, respondentSheet, "응답자 특성");
 
-    // Sheet 2: Likert Scale Distribution
-    const distributionData = [];
-    const satisfactionQuestions = Object.keys(analysisResults.satisfactionAverages[Object.keys(analysisResults.satisfactionAverages)[0]].scores).filter(q => q !== '전체');
-    const distributionHeaders = ["과목명"];
-    satisfactionQuestions.forEach(q => distributionHeaders.push(`${q}-매우그렇다`, `${q}-그렇다`, `${q}-보통`, `${q}-그렇지않다`, `${q}-매우그렇지않다`, `${q}-합계`));
-    distributionData.push(distributionHeaders);
+    const satisfactionSubjects = Object.keys(analysisResults.satisfactionAverages);
 
-    Object.values(analysisResults.satisfactionDistribution).forEach(data => {
-        const row = [data.subject];
-        satisfactionQuestions.forEach(question => {
-            const questionData = data.questions[question];
-            if (questionData) {
-                const values = [questionData["매우 그렇다"], questionData["그렇다"], questionData["보통"], questionData["그렇지 않다"], questionData["매우 그렇지 않다"]];
-                row.push(...values, values.reduce((a, b) => a + b, 0));
-            } else {
-                row.push(0, 0, 0, 0, 0, 0);
-            }
+    if (satisfactionSubjects.length > 0) {
+        // Sheet 2: Likert Scale Distribution
+        const distributionData = [];
+        const satisfactionQuestions = Object.keys(analysisResults.satisfactionAverages[satisfactionSubjects[0]].scores).filter(q => q !== '전체');
+        const distributionHeaders = ["과목명"];
+        satisfactionQuestions.forEach(q => distributionHeaders.push(`${q}-매우그렇다`, `${q}-그렇다`, `${q}-보통`, `${q}-그렇지않다`, `${q}-매우그렇지않다`, `${q}-합계`));
+        distributionData.push(distributionHeaders);
+
+        Object.values(analysisResults.satisfactionDistribution).forEach(data => {
+            const row = [data.subject];
+            satisfactionQuestions.forEach(question => {
+                const questionData = data.questions[question];
+                if (questionData) {
+                    const values = [questionData["매우 그렇다"], questionData["그렇다"], questionData["보통"], questionData["그렇지 않다"], questionData["매우 그렇지 않다"]];
+                    row.push(...values, values.reduce((a, b) => a + b, 0));
+                } else {
+                    row.push(0, 0, 0, 0, 0, 0);
+                }
+            });
+            distributionData.push(row);
         });
-        distributionData.push(row);
-    });
-    const distributionSheet = XLSX.utils.aoa_to_sheet(distributionData);
-    XLSX.utils.book_append_sheet(workbook, distributionSheet, "객관식 응답 집계");
+        const distributionSheet = XLSX.utils.aoa_to_sheet(distributionData);
+        XLSX.utils.book_append_sheet(workbook, distributionSheet, "객관식 응답 집계");
 
-    // Sheet 3: Average Satisfaction Scores
-    const averageData = [];
-    const averageHeaders = ["과목명", "전체", ...satisfactionQuestions];
-    averageData.push(averageHeaders);
+        // Sheet 3: Average Satisfaction Scores
+        const averageData = [];
+        const averageHeaders = ["과목명", "전체", ...satisfactionQuestions];
+        averageData.push(averageHeaders);
 
-    Object.values(analysisResults.satisfactionAverages).forEach(data => {
-        const row = [data.subject, data.scores["전체"]];
-        satisfactionQuestions.forEach(question => row.push(data.scores[question] || 0));
-        averageData.push(row);
-    });
-    const averageSheet = XLSX.utils.aoa_to_sheet(averageData);
-    XLSX.utils.book_append_sheet(workbook, averageSheet, "평균만족도");
+        Object.values(analysisResults.satisfactionAverages).forEach(data => {
+            const row = [data.subject, data.scores["전체"]];
+            satisfactionQuestions.forEach(question => row.push(data.scores[question] || 0));
+            averageData.push(row);
+        });
+        const averageSheet = XLSX.utils.aoa_to_sheet(averageData);
+        XLSX.utils.book_append_sheet(workbook, averageSheet, "평균만족도");
+    }
 
     // Generate Blob URL
     const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
@@ -221,11 +225,11 @@ export async function analyzeSatisfactionData(rawData, XLSX) {
 
     const columnIndexes = {
         serialNumber: headers.findIndex(h => h.includes('연번')),
-        subject: headers.findIndex(h => h.includes('강좌명')),
-        gender: headers.findIndex(h => h.includes('성별')),
-        region: headers.findIndex(h => h.includes('지역')),
-        age: headers.findIndex(h => h.includes('연령')),
-        job: headers.findIndex(h => h.includes('직업')),
+        subject: headers.findIndex(h => h.includes('과목명')),
+        gender: 4,
+        region: 5,
+        age: 6,
+        job: 7,
     };
 
     const questionPatterns = ["2-1.*적극", "2-2.*전문", "2-3.*충실", "2-4.*시간", "2-5.*활용", "2-6.*유익", "2-7.*교재", "2-8.*시설", "2-9.*만족"];
