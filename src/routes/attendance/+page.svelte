@@ -122,7 +122,7 @@
 
       {#if !data}
         <ExcelUploader
-          sheetNamePattern={"개인별 출석현황"}
+          sheetNamePattern={"(\\d+\\.)?개인별\\s?출석현황"}
           headerHint={"연번"}
           description={"'개인별 출석현황' 시트가 포함된 .xlsx 또는 .xls 파일을 업로드하면 자동으로 분석이 시작됩니다."}
           onUpload={handleUpload}

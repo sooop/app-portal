@@ -91,7 +91,7 @@
     {#if !results && !analyzing}
       <div class="mb-8">
         <ExcelUploader
-          sheetNamePattern={"원본데이터"}
+          sheetNamePattern={"(\\d+\\.)?원본데이(?:터|타)"}
           headerHint={"연번"}
           title={"설문 조사 결과 파일 업로드"}
           description={"'원본데이터' 시트가 포함된 .xlsx 파일을 선택하거나 드래그하세요."}

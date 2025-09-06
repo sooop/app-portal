@@ -34,9 +34,10 @@
         sheetStubs: true
       });
 
-      let sheetName = workbook.SheetNames.find(name =>
-        name.includes(sheetNamePattern)
-      );
+      let sheetName = workbook.SheetNames.find(name => {
+        const pattern = new RegExp(sheetNamePattern);
+        return pattern.test(name);
+      });
 
       if (!sheetName) {
         throw new Error(`'${sheetNamePattern}' 시트를 찾을 수 없습니다.`);
