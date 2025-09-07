@@ -14,19 +14,19 @@
 	};
 
 	/** @type {File | null} */
-	let file = null;
+	let file = $state(null);
  	/** @type {any} */
- 	let rawData = null;
+ 	let rawData = $state(null);
  	/** @type {any} */
- 	let result = null;
+ 	let result = $state(null);
 	/** @type {boolean} */
-	let analyzing = false;
+	let analyzing = $state(false);
 	/** @type {any} */
-	let results = null;
+	let results = $state(null);
 	/** @type {string | null} */
-	let downloadUrl = null;
-  /** @type {string} */
-  let error = '';
+	let downloadUrl = $state(null);
+	/** @type {string} */
+	let error = $state('');
 
 
   /** @param {{ rawData: any; }} detail */
@@ -178,9 +178,7 @@
 				<div class="bg-gray-50 p-4 rounded-lg">
 					<h3 class="font-semibold text-gray-800 mb-2">분석 내용</h3>
 					<ul class="text-sm text-gray-600 space-y-1">
-						<li>
-							• 응답자 특성 분석 (성별, 거주지역, 연령대, 직업별
-							집계)
+						<li>• 응답자 특성 분석 (성별, 거주지역, 연령대, 직업별 집계)
 						</li>
 						<li>• 9개 문항별 만족도 응답 분포 집계</li>
 						<li>• 과목별 문항별 평균 만족도 산출</li>
@@ -240,10 +238,3 @@
 		{/if}
 	</div>
 </div>
-
-<style>
-	:global(body) {
-		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-			"Helvetica Neue", Arial, sans-serif;
-	}
-</style>

@@ -1,7 +1,6 @@
 <script>
 	import Link from './Link.svelte';
 	let { data } = $props();
-
 </script>
 <div
 	class={[

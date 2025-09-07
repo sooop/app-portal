@@ -7,5 +7,4 @@
 		class={["inline-block rounded-sm p-2",
 	"hover:bg-blue-600 transition-colur duration-200"]}
 		>{title}</a>
-
 </li>
