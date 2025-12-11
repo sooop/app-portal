@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(fd:*)",
+      "Bash(exa:*)",
+      "Bash(tokei:*)",
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "Bash(echo:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

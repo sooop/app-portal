@@ -1,21 +1,16 @@
 <script>
-	import Link from './Link.svelte';
-	let { data } = $props();
+	import UnifiedAnalyzer from '$lib/components/UnifiedAnalyzer.svelte';
 </script>
-<div
-	class={[
-		"flex flex-row items-center justify-center w-full h-full",
-		"min-h-screen",
-	]}
->
-	<div class="flex flex-col">
-		<h1 class="text-xl text-center font-bold text-white">List of Applications</h1>
-		<div class="p-4">
-			<ul>
-				{#each data.links as {link, title}}
-					<Link {link} {title}/>
-				{/each}
-			</ul>
-		</div>
+
+<div class="min-h-screen bg-gray-50 py-12 px-6">
+	<div class="max-w-6xl mx-auto">
+		<header class="mb-12 text-center">
+			<h1 class="text-3xl font-medium text-gray-900">통합 분석 시스템</h1>
+			<p class="mt-2 text-sm text-gray-600">
+				Excel 파일 하나로 수강생 정보와 만족도를 동시에 분석합니다
+			</p>
+		</header>
+
+		<UnifiedAnalyzer />
 	</div>
 </div>
