@@ -17,6 +17,9 @@
     let downloadUrl = $state('');
     let isDragging = $state(false);
 
+    // 파일 크기 제한: 50MB
+    const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
     // Excel 데이터 추출 헬퍼 함수
     function extractSheetData(workbook, sheetName, headerHint) {
         const worksheet = workbook.Sheets[sheetName];
@@ -43,18 +46,34 @@
         return window.XLSX.utils.sheet_to_json(worksheet, { range: dataStartRow });
     }
 
+    // Blob URL cleanup 함수
+    function cleanupDownloadUrl() {
+        if (downloadUrl) {
+            URL.revokeObjectURL(downloadUrl);
+            downloadUrl = '';
+        }
+    }
+
     // 파일 업로드 처리
     async function processExcelFile(uploadedFile) {
         loading = true;
         error = '';
         attendanceResult = null;
         satisfactionResult = null;
+        cleanupDownloadUrl(); // 이전 Blob URL 정리
 
         try {
+            // 파일 크기 검증
+            if (uploadedFile.size > MAX_FILE_SIZE) {
+                throw new Error(`파일 크기가 너무 큽니다. 최대 ${MAX_FILE_SIZE / (1024 * 1024)}MB까지 업로드 가능합니다.`);
+            }
+
             // XLSX 라이브러리 로드 확인
             if (!window.XLSX) {
                 const script = document.createElement('script');
                 script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+                script.integrity = 'sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfG2zm+/uXkRu6rGb7UKUvTJ9YhA8SPhFl5VTf8p1k1FhA==';
+                script.crossOrigin = 'anonymous';
                 await new Promise((resolve, reject) => {
                     script.onload = resolve;
                     script.onerror = reject;
@@ -190,10 +209,10 @@
 
     // 파일 재업로드
     function resetAnalysis() {
+        cleanupDownloadUrl(); // Blob URL 정리
         attendanceResult = null;
         satisfactionResult = null;
         error = '';
-        downloadUrl = '';
     }
 </script>
 

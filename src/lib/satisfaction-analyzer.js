@@ -214,10 +214,16 @@ async function generateExcelFile(analysisResults, XLSX) {
  * @param {Array<Object>} rawData - The raw data array from the Excel sheet.
  * @param {Object} XLSX - The window.XLSX library object.
  * @returns {Promise<Object>} A promise that resolves to an object containing analysis results and a download URL.
+ * @note The download URL is a Blob URL that should be revoked using URL.revokeObjectURL() when no longer needed.
  */
 export async function analyzeSatisfactionData(rawData, XLSX) {
     if (!rawData || rawData.length === 0) {
         throw new Error("분석할 데이터가 없습니다.");
+    }
+
+    // 데이터 크기 검증 (너무 큰 데이터 방지)
+    if (rawData.length > 100000) {
+        throw new Error("데이터가 너무 큽니다. 최대 100,000행까지 분석 가능합니다.");
     }
 
     const headers = Object.keys(rawData[0]);

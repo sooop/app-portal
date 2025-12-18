@@ -52,6 +52,11 @@ export function getAgeGroup(age) {
 export function analyzeData(data, subjectCompletionRates) {
   if (!data) return null;
 
+  // 데이터 크기 검증
+  if (data.length > 100000) {
+    throw new Error("데이터가 너무 큽니다. 최대 100,000행까지 분석 가능합니다.");
+  }
+
   // 1. 과목별 기본 분석
   const subjectStats = {};
 
@@ -189,6 +194,12 @@ export function downloadExcel(analysis, XLSX) {
   const ws = XLSX.utils.json_to_sheet(subjectData);
   XLSX.utils.book_append_sheet(wb, ws, '과목별 분석결과');
 
-  // 파일 다운로드
-  XLSX.writeFile(wb, `강좌분석결과_${new Date().toISOString().split('T')[0]}.xlsx`);
+  // 파일 다운로드 - 안전한 파일명 생성
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const safeFilename = `강좌분석결과_${year}-${month}-${day}.xlsx`;
+
+  XLSX.writeFile(wb, safeFilename);
 }

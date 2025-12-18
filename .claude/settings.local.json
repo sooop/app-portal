@@ -6,7 +6,8 @@
       "Bash(tokei:*)",
       "Bash(tree:*)",
       "Bash(find:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(npm run check:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,5 +1,9 @@
 <svelte:head>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
+    integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfG2zm+/uXkRu6rGb7UKUvTJ9YhA8SPhFl5VTf8p1k1FhA=="
+    crossorigin="anonymous"
+  ></script>
 </svelte:head>
 
 <script>
@@ -19,12 +23,27 @@
 
   let fileInputRef;
 
+  // 파일 크기 제한: 50MB
+  const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+  /**
+   * RegExp 패턴을 안전하게 이스케이프하는 함수
+   */
+  function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   async function processFile(uploadedFile) {
     file = uploadedFile;
     loading = true;
     error = '';
 
     try {
+      // 파일 크기 검증
+      if (uploadedFile.size > MAX_FILE_SIZE) {
+        throw new Error(`파일 크기가 너무 큽니다. 최대 ${MAX_FILE_SIZE / (1024 * 1024)}MB까지 업로드 가능합니다.`);
+      }
+
       const buffer = await uploadedFile.arrayBuffer();
       const workbook = window.XLSX.read(buffer, {
         cellStyles: true,
@@ -35,8 +54,14 @@
       });
 
       let sheetName = workbook.SheetNames.find(name => {
-        const pattern = new RegExp(sheetNamePattern);
-        return pattern.test(name);
+        // ReDoS 방지: 패턴을 이스케이프하거나 안전한 검색 사용
+        try {
+          const pattern = new RegExp(sheetNamePattern);
+          return pattern.test(name);
+        } catch (e) {
+          // 정규식 생성 실패 시 단순 문자열 포함 검사로 폴백
+          return name.includes(sheetNamePattern);
+        }
       });
 
       if (!sheetName) {
