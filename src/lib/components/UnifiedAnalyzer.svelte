@@ -108,7 +108,7 @@
                 생년월일: row['생년월일'],
                 수업일: parseInt(row['수업일']) || 0,
                 출석일: parseInt(row['출석일']) || 0,
-                출석률: parseFloat(row['출석률']) || 0,
+                출석률: (parseFloat(row['출석률']) || 0) / 100,
                 수료여부: row['수료여부']
             })).filter(item => item.과목명 && item.이름);
 
