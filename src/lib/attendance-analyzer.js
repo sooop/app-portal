@@ -175,24 +175,33 @@ export function analyzeData(data, subjectCompletionRates) {
 /**
  * 분석 결과를 엑셀 파일로 다운로드하는 함수
  * @param {Object} analysis - analyzeData 함수로부터 반환된 분석 결과 객체
- * @param {Object} XLSX - window.XLSX 라이브러리 객체
+ * @param {Object} ExcelJS - ExcelJS 라이브러리 객체
  */
-export function downloadExcel(analysis, XLSX) {
-  if (!analysis || !XLSX) return;
+export async function downloadExcel(analysis, ExcelJS) {
+  if (!analysis || !ExcelJS) return;
 
-  const wb = XLSX.utils.book_new();
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('과목별 분석결과');
 
-  // 과목별 결과 시트
-  const subjectData = analysis.subjectResults.map(item => ({
-    '과목명': item.과목명,
-    '수강인원': item.수강인원,
-    '평균출석률': Math.round(item.평균출석률 * 1000) / 10, // 소수점 1자리 %
-    '수료인원': item.수료인원,
-    '수료율': Math.round(item.수료율 * 1000) / 10 // 소수점 1자리 %
-  }));
+  // 헤더 설정
+  worksheet.columns = [
+    { header: '과목명', key: '과목명', width: 30 },
+    { header: '수강인원', key: '수강인원', width: 12 },
+    { header: '평균출석률', key: '평균출석률', width: 12 },
+    { header: '수료인원', key: '수료인원', width: 12 },
+    { header: '수료율', key: '수료율', width: 12 }
+  ];
 
-  const ws = XLSX.utils.json_to_sheet(subjectData);
-  XLSX.utils.book_append_sheet(wb, ws, '과목별 분석결과');
+  // 과목별 결과 시트 데이터 추가
+  analysis.subjectResults.forEach(item => {
+    worksheet.addRow({
+      '과목명': item.과목명,
+      '수강인원': item.수강인원,
+      '평균출석률': Math.round(item.평균출석률 * 1000) / 10, // 소수점 1자리 %
+      '수료인원': item.수료인원,
+      '수료율': Math.round(item.수료율 * 1000) / 10 // 소수점 1자리 %
+    });
+  });
 
   // 파일 다운로드 - 안전한 파일명 생성
   const date = new Date();
@@ -201,5 +210,13 @@ export function downloadExcel(analysis, XLSX) {
   const day = String(date.getDate()).padStart(2, '0');
   const safeFilename = `강좌분석결과_${year}-${month}-${day}.xlsx`;
 
-  XLSX.writeFile(wb, safeFilename);
+  // 버퍼로 변환 후 다운로드
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = safeFilename;
+  link.click();
+  URL.revokeObjectURL(url);
 }

@@ -1,6 +1,6 @@
 <script>
     import { fade, fly } from 'svelte/transition';
-    import * as XLSX from 'xlsx';
+    import ExcelJS from 'exceljs';
     import { analyzeData, downloadExcel } from '$lib/attendance-analyzer.js';
     import { analyzeSatisfactionData } from '$lib/satisfaction-analyzer.js';
     import AttendanceResults from './AttendanceResults.svelte';
@@ -23,28 +23,65 @@
 
     // Excel 데이터 추출 헬퍼 함수
     function extractSheetData(workbook, sheetName, headerHint) {
-        const worksheet = workbook.Sheets[sheetName];
-        const range = XLSX.utils.decode_range(worksheet['!ref']);
+        const worksheet = workbook.getWorksheet(sheetName);
+        if (!worksheet) {
+            throw new Error(`'${sheetName}' 시트를 찾을 수 없습니다.`);
+        }
 
         // 헤더 행 찾기
         let dataStartRow = -1;
-        for (let row = range.s.r; row <= range.e.r; row++) {
-            for (let col = range.s.c; col <= range.e.c; col++) {
-                const cellAddress = XLSX.utils.encode_cell({r: row, c: col});
-                const cell = worksheet[cellAddress];
-                if (cell && cell.v && cell.v.toString().includes(headerHint)) {
-                    dataStartRow = row;
-                    break;
+        let headers = [];
+
+        worksheet.eachRow((row, rowNumber) => {
+            if (dataStartRow !== -1) return; // 이미 찾았으면 종료
+
+            row.eachCell((cell) => {
+                if (cell.value && cell.value.toString().includes(headerHint)) {
+                    dataStartRow = rowNumber;
+                    // 헤더 행 저장
+                    row.eachCell((headerCell, colNumber) => {
+                        headers[colNumber - 1] = headerCell.value ? headerCell.value.toString() : '';
+                    });
                 }
-            }
-            if (dataStartRow !== -1) break;
-        }
+            });
+        });
 
         if (dataStartRow === -1) {
             throw new Error(`'${sheetName}' 시트에서 '${headerHint}' 헤더를 찾을 수 없습니다.`);
         }
 
-        return XLSX.utils.sheet_to_json(worksheet, { range: dataStartRow });
+        // 데이터 행 추출
+        const data = [];
+        worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber <= dataStartRow) return; // 헤더 및 이전 행 건너뛰기
+
+            const rowData = {};
+            row.eachCell((cell, colNumber) => {
+                const header = headers[colNumber - 1];
+                if (header) {
+                    // ExcelJS의 Rich Text 객체 처리
+                    let value = cell.value;
+                    if (value && typeof value === 'object') {
+                        // Rich Text 객체인 경우
+                        if (value.richText) {
+                            value = value.richText.map(t => t.text).join('');
+                        } else if (value.text) {
+                            value = value.text;
+                        } else {
+                            value = cell.text || String(value);
+                        }
+                    }
+                    rowData[header] = value;
+                }
+            });
+
+            // 빈 행이 아닌 경우만 추가
+            if (Object.keys(rowData).length > 0) {
+                data.push(rowData);
+            }
+        });
+
+        return data;
     }
 
     // Blob URL cleanup 함수
@@ -70,15 +107,16 @@
             }
 
             const buffer = await uploadedFile.arrayBuffer();
-            const workbook = XLSX.read(buffer);
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.load(buffer);
 
             // 시트 찾기
-            const attendanceSheetName = workbook.SheetNames.find(name =>
-                /(\d+\.)?개인별\s?출석현황/.test(name)
-            );
-            const satisfactionSheetName = workbook.SheetNames.find(name =>
-                /(\d+\.)?원본데이(?:터|타)/.test(name)
-            );
+            const attendanceSheetName = workbook.worksheets.find(ws =>
+                /(\d+\.)?개인별\s?출석현황/.test(ws.name)
+            )?.name;
+            const satisfactionSheetName = workbook.worksheets.find(ws =>
+                /(\d+\.)?원본데이(?:터|타)/.test(ws.name)
+            )?.name;
 
             if (!attendanceSheetName || !satisfactionSheetName) {
                 throw new Error(
@@ -121,7 +159,7 @@
             // 병렬 분석
             const [attendance, satisfaction] = await Promise.all([
                 Promise.resolve(analyzeData(structuredAttendance, defaultRates)),
-                analyzeSatisfactionData(satisfactionRawData, XLSX)
+                analyzeSatisfactionData(satisfactionRawData, ExcelJS)
             ]);
 
             attendanceResult = attendance;
@@ -180,9 +218,9 @@
     });
 
     // Excel 다운로드 핸들러
-    function handleAttendanceDownload() {
+    async function handleAttendanceDownload() {
         if (attendanceResult) {
-            downloadExcel(attendanceResult, XLSX);
+            await downloadExcel(attendanceResult, ExcelJS);
         }
     }
 

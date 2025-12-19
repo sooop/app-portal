@@ -132,23 +132,25 @@ function normalizeText(text, category) {
 }
 
 // Helper function to generate the Excel file and return a blob URL
-async function generateExcelFile(analysisResults, XLSX) {
-    if (!analysisResults || !XLSX) return null;
+async function generateExcelFile(analysisResults, ExcelJS) {
+    if (!analysisResults || !ExcelJS) return null;
 
-    const workbook = XLSX.utils.book_new();
+    const workbook = new ExcelJS.Workbook();
 
     // Sheet 1: Respondent Characteristics
-    const respondentData = [];
+    const respondentSheet = workbook.addWorksheet("응답자 특성");
     const respondentHeaders = [
         "교육과목", "성별-남", "성별-여", "성별-합계",
         ...Object.keys(regionMapping), "기타지역", "지역-합계",
         "19세 이하", "20대", "30대", "40대", "50대", "60대", "70대이상", "연령-합계",
         "직장인", "자영업", "농어업축산임업", "주부", "학생", "기타", "직업-합계",
     ];
-    respondentData.push(respondentHeaders);
+    respondentSheet.addRow(respondentHeaders);
 
     Object.values(analysisResults.respondentCharacteristics).forEach(data => {
-        const row = [data.subject];
+        // subject가 객체일 경우 문자열로 변환
+        const subjectName = typeof data.subject === 'object' ? String(data.subject) : data.subject;
+        const row = [subjectName];
         row.push(data.gender.남성, data.gender.여성, data.gender.남성 + data.gender.여성);
         Object.keys(regionMapping).forEach(region => row.push(data.region[region] || 0));
         row.push(data.region.기타지역);
@@ -157,23 +159,23 @@ async function generateExcelFile(analysisResults, XLSX) {
         row.push(Object.values(data.age).reduce((a, b) => a + b, 0));
         Object.keys(data.job).forEach(job => row.push(data.job[job]));
         row.push(Object.values(data.job).reduce((a, b) => a + b, 0));
-        respondentData.push(row);
+        respondentSheet.addRow(row);
     });
-    const respondentSheet = XLSX.utils.aoa_to_sheet(respondentData);
-    XLSX.utils.book_append_sheet(workbook, respondentSheet, "응답자 특성");
 
     const satisfactionSubjects = Object.keys(analysisResults.satisfactionAverages);
 
     if (satisfactionSubjects.length > 0) {
         // Sheet 2: Likert Scale Distribution
-        const distributionData = [];
+        const distributionSheet = workbook.addWorksheet("객관식 응답 집계");
         const satisfactionQuestions = Object.keys(analysisResults.satisfactionAverages[satisfactionSubjects[0]].scores).filter(q => q !== '전체');
         const distributionHeaders = ["과목명"];
         satisfactionQuestions.forEach(q => distributionHeaders.push(`${q}-매우그렇다`, `${q}-그렇다`, `${q}-보통`, `${q}-그렇지않다`, `${q}-매우그렇지않다`, `${q}-합계`));
-        distributionData.push(distributionHeaders);
+        distributionSheet.addRow(distributionHeaders);
 
         Object.values(analysisResults.satisfactionDistribution).forEach(data => {
-            const row = [data.subject];
+            // subject가 객체일 경우 문자열로 변환
+            const subjectName = typeof data.subject === 'object' ? String(data.subject) : data.subject;
+            const row = [subjectName];
             satisfactionQuestions.forEach(question => {
                 const questionData = data.questions[question];
                 if (questionData) {
@@ -183,27 +185,25 @@ async function generateExcelFile(analysisResults, XLSX) {
                     row.push(0, 0, 0, 0, 0, 0);
                 }
             });
-            distributionData.push(row);
+            distributionSheet.addRow(row);
         });
-        const distributionSheet = XLSX.utils.aoa_to_sheet(distributionData);
-        XLSX.utils.book_append_sheet(workbook, distributionSheet, "객관식 응답 집계");
 
         // Sheet 3: Average Satisfaction Scores
-        const averageData = [];
+        const averageSheet = workbook.addWorksheet("평균만족도");
         const averageHeaders = ["과목명", "전체", ...satisfactionQuestions];
-        averageData.push(averageHeaders);
+        averageSheet.addRow(averageHeaders);
 
         Object.values(analysisResults.satisfactionAverages).forEach(data => {
-            const row = [data.subject, data.scores["전체"]];
+            // subject가 객체일 경우 문자열로 변환
+            const subjectName = typeof data.subject === 'object' ? String(data.subject) : data.subject;
+            const row = [subjectName, data.scores["전체"]];
             satisfactionQuestions.forEach(question => row.push(data.scores[question] || 0));
-            averageData.push(row);
+            averageSheet.addRow(row);
         });
-        const averageSheet = XLSX.utils.aoa_to_sheet(averageData);
-        XLSX.utils.book_append_sheet(workbook, averageSheet, "평균만족도");
     }
 
     // Generate Blob URL
-    const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const excelBuffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([excelBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     return URL.createObjectURL(blob);
 }
@@ -212,11 +212,11 @@ async function generateExcelFile(analysisResults, XLSX) {
 /**
  * Analyzes satisfaction survey data from an Excel file.
  * @param {Array<Object>} rawData - The raw data array from the Excel sheet.
- * @param {Object} XLSX - The window.XLSX library object.
+ * @param {Object} ExcelJS - The ExcelJS library object.
  * @returns {Promise<Object>} A promise that resolves to an object containing analysis results and a download URL.
  * @note The download URL is a Blob URL that should be revoked using URL.revokeObjectURL() when no longer needed.
  */
-export async function analyzeSatisfactionData(rawData, XLSX) {
+export async function analyzeSatisfactionData(rawData, ExcelJS) {
     if (!rawData || rawData.length === 0) {
         throw new Error("분석할 데이터가 없습니다.");
     }
@@ -321,7 +321,7 @@ export async function analyzeSatisfactionData(rawData, XLSX) {
         totalResponses: dataRows.length,
     };
 
-    const url = await generateExcelFile(analysisResults, XLSX);
+    const url = await generateExcelFile(analysisResults, ExcelJS);
 
     return {
         results: analysisResults,
