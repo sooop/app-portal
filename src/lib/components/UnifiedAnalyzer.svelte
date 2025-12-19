@@ -1,5 +1,6 @@
 <script>
     import { fade, fly } from 'svelte/transition';
+    import * as XLSX from 'xlsx';
     import { analyzeData, downloadExcel } from '$lib/attendance-analyzer.js';
     import { analyzeSatisfactionData } from '$lib/satisfaction-analyzer.js';
     import AttendanceResults from './AttendanceResults.svelte';
@@ -23,13 +24,13 @@
     // Excel 데이터 추출 헬퍼 함수
     function extractSheetData(workbook, sheetName, headerHint) {
         const worksheet = workbook.Sheets[sheetName];
-        const range = window.XLSX.utils.decode_range(worksheet['!ref']);
+        const range = XLSX.utils.decode_range(worksheet['!ref']);
 
         // 헤더 행 찾기
         let dataStartRow = -1;
         for (let row = range.s.r; row <= range.e.r; row++) {
             for (let col = range.s.c; col <= range.e.c; col++) {
-                const cellAddress = window.XLSX.utils.encode_cell({r: row, c: col});
+                const cellAddress = XLSX.utils.encode_cell({r: row, c: col});
                 const cell = worksheet[cellAddress];
                 if (cell && cell.v && cell.v.toString().includes(headerHint)) {
                     dataStartRow = row;
@@ -43,7 +44,7 @@
             throw new Error(`'${sheetName}' 시트에서 '${headerHint}' 헤더를 찾을 수 없습니다.`);
         }
 
-        return window.XLSX.utils.sheet_to_json(worksheet, { range: dataStartRow });
+        return XLSX.utils.sheet_to_json(worksheet, { range: dataStartRow });
     }
 
     // Blob URL cleanup 함수
@@ -68,21 +69,8 @@
                 throw new Error(`파일 크기가 너무 큽니다. 최대 ${MAX_FILE_SIZE / (1024 * 1024)}MB까지 업로드 가능합니다.`);
             }
 
-            // XLSX 라이브러리 로드 확인
-            if (!window.XLSX) {
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-                script.integrity = 'sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfG2zm+/uXkRu6rGb7UKUvTJ9YhA8SPhFl5VTf8p1k1FhA==';
-                script.crossOrigin = 'anonymous';
-                await new Promise((resolve, reject) => {
-                    script.onload = resolve;
-                    script.onerror = reject;
-                    document.head.appendChild(script);
-                });
-            }
-
             const buffer = await uploadedFile.arrayBuffer();
-            const workbook = window.XLSX.read(buffer);
+            const workbook = XLSX.read(buffer);
 
             // 시트 찾기
             const attendanceSheetName = workbook.SheetNames.find(name =>
@@ -133,7 +121,7 @@
             // 병렬 분석
             const [attendance, satisfaction] = await Promise.all([
                 Promise.resolve(analyzeData(structuredAttendance, defaultRates)),
-                analyzeSatisfactionData(satisfactionRawData, window.XLSX)
+                analyzeSatisfactionData(satisfactionRawData, XLSX)
             ]);
 
             attendanceResult = attendance;
@@ -193,8 +181,8 @@
 
     // Excel 다운로드 핸들러
     function handleAttendanceDownload() {
-        if (attendanceResult && window.XLSX) {
-            downloadExcel(attendanceResult, window.XLSX);
+        if (attendanceResult) {
+            downloadExcel(attendanceResult, XLSX);
         }
     }
 
