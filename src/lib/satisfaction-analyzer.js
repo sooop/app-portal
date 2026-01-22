@@ -61,13 +61,14 @@ function normalizeText(text, category) {
             if (cleanText.includes("30")) return "30대";
             if (cleanText.includes("40")) return "40대";
             if (cleanText.includes("50")) return "50대";
-            if (cleanText.includes("60")) return "60대";
+            // 60대 이상으로 통일 (attendance-analyzer와 일관성 유지)
             if (
+                cleanText.includes("60") ||
                 cleanText.includes("70") ||
                 cleanText.includes("80") ||
                 cleanText.includes("90")
             )
-                return "70대이상";
+                return "60대 이상";
             break;
 
         case "job":
@@ -142,7 +143,7 @@ async function generateExcelFile(analysisResults, ExcelJS) {
     const respondentHeaders = [
         "교육과목", "성별-남", "성별-여", "성별-합계",
         ...Object.keys(regionMapping), "기타지역", "지역-합계",
-        "19세 이하", "20대", "30대", "40대", "50대", "60대", "70대이상", "연령-합계",
+        "19세 이하", "20대", "30대", "40대", "50대", "60대 이상", "연령-합계",
         "직장인", "자영업", "농어업축산임업", "주부", "학생", "기타", "직업-합계",
     ];
     respondentSheet.addRow(respondentHeaders);
@@ -209,6 +210,9 @@ async function generateExcelFile(analysisResults, ExcelJS) {
 }
 
 
+// 상수 정의
+const MAX_ROWS = 100000;
+
 /**
  * Analyzes satisfaction survey data from an Excel file.
  * @param {Array<Object>} rawData - The raw data array from the Excel sheet.
@@ -222,21 +226,28 @@ export async function analyzeSatisfactionData(rawData, ExcelJS) {
     }
 
     // 데이터 크기 검증 (너무 큰 데이터 방지)
-    if (rawData.length > 100000) {
-        throw new Error("데이터가 너무 큽니다. 최대 100,000행까지 분석 가능합니다.");
+    if (rawData.length > MAX_ROWS) {
+        throw new Error(`데이터가 너무 큽니다. 최대 ${MAX_ROWS.toLocaleString()}행까지 분석 가능합니다.`);
     }
 
     const headers = Object.keys(rawData[0]);
     const dataRows = rawData;
 
+    // 열 인덱스 동적 탐지
     const columnIndexes = {
         serialNumber: headers.findIndex(h => h.includes('연번')),
         subject: headers.findIndex(h => h.includes('과목명')),
-        gender: 4,
-        region: 5,
-        age: 6,
-        job: 7,
+        gender: headers.findIndex(h => /성별/i.test(h)),
+        region: headers.findIndex(h => /지역|거주|주소/i.test(h)),
+        age: headers.findIndex(h => /연령|나이/i.test(h)),
+        job: headers.findIndex(h => /직업|직종/i.test(h)),
     };
+
+    // 필수 열이 없는 경우 경고 (폴백으로 기존 인덱스 사용)
+    if (columnIndexes.gender === -1) columnIndexes.gender = 4;
+    if (columnIndexes.region === -1) columnIndexes.region = 5;
+    if (columnIndexes.age === -1) columnIndexes.age = 6;
+    if (columnIndexes.job === -1) columnIndexes.job = 7;
 
     const questionPatterns = ["2-1.*적극", "2-2.*전문", "2-3.*충실", "2-4.*시간", "2-5.*활용", "2-6.*유익", "2-7.*교재", "2-8.*시설", "2-9.*만족"];
     const satisfactionColumnIndexes = questionPatterns.map(pattern => {
@@ -266,7 +277,7 @@ export async function analyzeSatisfactionData(rawData, ExcelJS) {
 
     for (const [subject, rows] of Object.entries(subjectGroups)) {
         // Initialize structures
-        respondentCharacteristics[subject] = { subject, gender: { 남성: 0, 여성: 0 }, region: Object.fromEntries(Object.keys(regionMapping).map(k => [k, 0])), age: {"19세 이하":0, "20대":0, "30대":0, "40대":0, "50대":0, "60대":0, "70대이상":0}, job: {"직장인":0, "자영업":0, "농어업축산임업":0, "주부":0, "학생":0, "기타":0} };
+        respondentCharacteristics[subject] = { subject, gender: { 남성: 0, 여성: 0 }, region: Object.fromEntries(Object.keys(regionMapping).map(k => [k, 0])), age: {"19세 이하":0, "20대":0, "30대":0, "40대":0, "50대":0, "60대 이상":0}, job: {"직장인":0, "자영업":0, "농어업축산임업":0, "주부":0, "학생":0, "기타":0} };
         respondentCharacteristics[subject].region['기타지역'] = 0;
         satisfactionDistribution[subject] = { subject, questions: {} };
         satisfactionAverages[subject] = { subject, scores: {} };

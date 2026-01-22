@@ -1,6 +1,5 @@
 <script>
     let {analysis} = $props();
-    $inspect(analysis)
 </script>
 
 
@@ -9,7 +8,13 @@
         <h2 class="text-2xl font-medium text-gray-900">과목별 분석 결과</h2>
     </div>
 
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto relative">
+        <div class="md:hidden text-xs text-gray-500 mb-2 flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+            </svg>
+            좌우로 스크롤하세요
+        </div>
         <table class="min-w-full table-auto">
         <thead>
             <tr class="bg-gray-100 border-b border-gray-200">

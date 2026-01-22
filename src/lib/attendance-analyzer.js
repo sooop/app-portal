@@ -43,6 +43,9 @@ export function getAgeGroup(age) {
   return '60대 이상';
 }
 
+// 상수 정의
+const MAX_ROWS = 100000;
+
 /**
  * 출석 데이터를 분석하는 함수
  * @param {Array<Object>} data - 구조화된 출석 데이터 배열
@@ -53,8 +56,8 @@ export function analyzeData(data, subjectCompletionRates) {
   if (!data) return null;
 
   // 데이터 크기 검증
-  if (data.length > 100000) {
-    throw new Error("데이터가 너무 큽니다. 최대 100,000행까지 분석 가능합니다.");
+  if (data.length > MAX_ROWS) {
+    throw new Error(`데이터가 너무 큽니다. 최대 ${MAX_ROWS.toLocaleString()}행까지 분석 가능합니다.`);
   }
 
   // 1. 과목별 기본 분석

@@ -10,7 +10,9 @@
       "Bash(npm run check:*)",
       "Bash(npm uninstall:*)",
       "Bash(npm install:*)",
-      "Bash(npm audit:*)"
+      "Bash(npm audit:*)",
+      "Bash(git -C \"D:\\\\project\\\\app-portal\" log --oneline -20)",
+      "Bash(git -C \"D:\\\\project\\\\app-portal\" remote -v)"
     ],
     "deny": [],
     "ask": []

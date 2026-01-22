@@ -1,15 +1,35 @@
 <script>
     import { fade, fly } from 'svelte/transition';
+    import { onMount, onDestroy } from 'svelte';
     import ExcelJS from 'exceljs';
     import { analyzeData, downloadExcel } from '$lib/attendance-analyzer.js';
     import { analyzeSatisfactionData } from '$lib/satisfaction-analyzer.js';
     import AttendanceResults from './AttendanceResults.svelte';
     import SatisfactionResults from './SatisfactionResults.svelte';
     import CompletionRateModal from './CompletionRateModal.svelte';
+    import FileHistory from './FileHistory.svelte';
+    import {
+        loadHistoryList,
+        addToHistory,
+        setCurrentHistoryId,
+        clearCurrentSelection
+    } from '$lib/db/history-store.svelte.js';
+
+    // 컴포넌트 마운트 시 이력 로드
+    onMount(() => {
+        loadHistoryList();
+    });
+
+    // 컴포넌트 언마운트 시 Blob URL 정리
+    onDestroy(() => {
+        cleanupDownloadUrl();
+        if (errorTimeout) clearTimeout(errorTimeout);
+    });
 
     let activeTab = $state('attendance');
     let file = $state(null);
     let loading = $state(false);
+    let loadingStep = $state(''); // 로딩 단계 표시
     let error = $state('');
     let attendanceResult = $state(null);
     let satisfactionResult = $state(null);
@@ -17,6 +37,12 @@
     let showModal = $state(false);
     let downloadUrl = $state('');
     let isDragging = $state(false);
+    let errorTimeout = $state(null); // 에러 자동 소멸 타이머
+    let originalAttendanceData = $state(null); // 원본 출석 데이터 (재분석용)
+    let satisfactionRawData = $state(null); // 만족도 원본 데이터 (이력 저장용)
+    let currentFileName = $state(''); // 현재 파일명
+    let currentFileSize = $state(0); // 현재 파일 크기
+    let currentFileContent = $state(null); // 현재 파일 ArrayBuffer
 
     // 파일 크기 제한: 50MB
     const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -92,9 +118,52 @@
         }
     }
 
+    // 출석 데이터 구조화 함수
+    function structureAttendanceData(rawData) {
+        return rawData.map(row => ({
+            연번: row['연번'],
+            과목명: row['과목명'],
+            이름: row['이름'],
+            성별: row['성별'],
+            생년월일: row['생년월일'],
+            수업일: parseInt(row['수업일']) || 0,
+            출석일: parseInt(row['출석일']) || 0,
+            출석률: (parseFloat(row['출석률']) || 0) / 100,
+            수료여부: row['수료여부']
+        })).filter(item => item.과목명 && item.이름);
+    }
+
+    // 과목별 기본 수료 기준 생성
+    function createDefaultCompletionRates(data, defaultRate = 0.7) {
+        const subjects = [...new Set(data.map(item => item.과목명))];
+        const rates = {};
+        subjects.forEach(subject => { rates[subject] = defaultRate; });
+        return rates;
+    }
+
+    // 에러 설정 함수 (자동 소멸 포함)
+    function setError(message) {
+        if (errorTimeout) clearTimeout(errorTimeout);
+        error = message;
+        if (message) {
+            errorTimeout = setTimeout(() => {
+                error = '';
+                errorTimeout = null;
+            }, 8000); // 8초 후 자동 소멸
+        }
+    }
+
+    // 에러 수동 닫기
+    function dismissError() {
+        if (errorTimeout) clearTimeout(errorTimeout);
+        error = '';
+        errorTimeout = null;
+    }
+
     // 파일 업로드 처리
     async function processExcelFile(uploadedFile) {
         loading = true;
+        loadingStep = '파일 읽는 중...';
         error = '';
         attendanceResult = null;
         satisfactionResult = null;
@@ -106,11 +175,18 @@
                 throw new Error(`파일 크기가 너무 큽니다. 최대 ${MAX_FILE_SIZE / (1024 * 1024)}MB까지 업로드 가능합니다.`);
             }
 
+            // 파일 정보 저장
+            currentFileName = uploadedFile.name;
+            currentFileSize = uploadedFile.size;
+
             const buffer = await uploadedFile.arrayBuffer();
+            currentFileContent = buffer.slice(0); // ArrayBuffer 복사
+            loadingStep = 'Excel 파일 파싱 중...';
             const workbook = new ExcelJS.Workbook();
             await workbook.xlsx.load(buffer);
 
             // 시트 찾기
+            loadingStep = '시트 확인 중...';
             const attendanceSheetName = workbook.worksheets.find(ws =>
                 /(\d+\.)?개인별\s?출석현황/.test(ws.name)
             )?.name;
@@ -126,40 +202,36 @@
             }
 
             // 데이터 추출
+            loadingStep = '출석 데이터 추출 중...';
             const attendanceRawData = extractSheetData(
                 workbook,
                 attendanceSheetName,
                 '연번'
             );
-            const satisfactionRawData = extractSheetData(
+            loadingStep = '만족도 데이터 추출 중...';
+            const extractedSatisfactionData = extractSheetData(
                 workbook,
                 satisfactionSheetName,
                 '연번'
             );
 
             // 출석 데이터 구조화
-            const structuredAttendance = attendanceRawData.map(row => ({
-                연번: row['연번'],
-                과목명: row['과목명'],
-                이름: row['이름'],
-                성별: row['성별'],
-                생년월일: row['생년월일'],
-                수업일: parseInt(row['수업일']) || 0,
-                출석일: parseInt(row['출석일']) || 0,
-                출석률: (parseFloat(row['출석률']) || 0) / 100,
-                수료여부: row['수료여부']
-            })).filter(item => item.과목명 && item.이름);
+            loadingStep = '데이터 구조화 중...';
+            const structuredAttendance = structureAttendanceData(attendanceRawData);
 
             // 수료 기준 설정
-            const subjects = [...new Set(structuredAttendance.map(item => item.과목명))];
-            const defaultRates = {};
-            subjects.forEach(subject => { defaultRates[subject] = 0.7; });
+            const defaultRates = createDefaultCompletionRates(structuredAttendance);
             subjectCompletionRates = defaultRates;
 
+            // 원본 데이터 저장 (재분석용)
+            originalAttendanceData = structuredAttendance;
+            satisfactionRawData = extractedSatisfactionData;
+
             // 병렬 분석
+            loadingStep = '데이터 분석 중...';
             const [attendance, satisfaction] = await Promise.all([
                 Promise.resolve(analyzeData(structuredAttendance, defaultRates)),
-                analyzeSatisfactionData(satisfactionRawData, ExcelJS)
+                analyzeSatisfactionData(extractedSatisfactionData, ExcelJS)
             ]);
 
             attendanceResult = attendance;
@@ -167,11 +239,28 @@
             downloadUrl = satisfaction.downloadUrl;
             activeTab = 'attendance'; // 첫 번째 탭 자동 선택
 
+            // IndexedDB에 이력 저장
+            loadingStep = '이력 저장 중...';
+            try {
+                await addToHistory({
+                    fileName: currentFileName,
+                    fileSize: currentFileSize,
+                    fileContent: currentFileContent,
+                    structuredAttendanceData: structuredAttendance,
+                    satisfactionRawData: extractedSatisfactionData,
+                    subjectCompletionRates: defaultRates
+                });
+            } catch (historyErr) {
+                console.warn('이력 저장 실패:', historyErr);
+                // 이력 저장 실패는 분석 결과 표시를 막지 않음
+            }
+
         } catch (err) {
-            error = err instanceof Error ? err.message : String(err);
+            setError(err instanceof Error ? err.message : String(err));
             console.error(err);
         } finally {
             loading = false;
+            loadingStep = '';
         }
     }
 
@@ -210,10 +299,9 @@
 
     // 수료 기준 변경 시 재분석
     $effect(() => {
-        if (attendanceResult && subjectCompletionRates) {
-            // 원본 데이터로 재분석 (여기서는 attendanceResult를 업데이트)
-            // 실제로는 원본 데이터를 보관하고 있어야 하지만,
-            // 지금은 간단하게 처리
+        if (originalAttendanceData && Object.keys(subjectCompletionRates).length > 0) {
+            // 원본 데이터로 재분석
+            attendanceResult = analyzeData(originalAttendanceData, subjectCompletionRates);
         }
     });
 
@@ -238,7 +326,58 @@
         cleanupDownloadUrl(); // Blob URL 정리
         attendanceResult = null;
         satisfactionResult = null;
+        originalAttendanceData = null;
+        satisfactionRawData = null;
+        subjectCompletionRates = {};
+        currentFileName = '';
+        currentFileSize = 0;
+        currentFileContent = null;
+        clearCurrentSelection();
         error = '';
+    }
+
+    /**
+     * 이력에서 파일 로드
+     * @param {Object} entry - IndexedDB entry
+     */
+    async function loadFromHistory(entry) {
+        loading = true;
+        loadingStep = '이력 불러오는 중...';
+        error = '';
+        attendanceResult = null;
+        satisfactionResult = null;
+        cleanupDownloadUrl();
+
+        try {
+            // 파일 정보 복원
+            currentFileName = entry.fileName;
+            currentFileSize = entry.fileSize;
+            currentFileContent = entry.fileContent;
+
+            // 원본 데이터 복원
+            originalAttendanceData = entry.structuredAttendanceData;
+            satisfactionRawData = entry.satisfactionRawData;
+            subjectCompletionRates = entry.subjectCompletionRates || createDefaultCompletionRates(entry.structuredAttendanceData);
+
+            // 분석 수행
+            loadingStep = '데이터 분석 중...';
+            const [attendance, satisfaction] = await Promise.all([
+                Promise.resolve(analyzeData(originalAttendanceData, subjectCompletionRates)),
+                analyzeSatisfactionData(satisfactionRawData, ExcelJS)
+            ]);
+
+            attendanceResult = attendance;
+            satisfactionResult = satisfaction.results;
+            downloadUrl = satisfaction.downloadUrl;
+            activeTab = 'attendance';
+
+        } catch (err) {
+            setError('파일 불러오기 실패: ' + (err instanceof Error ? err.message : String(err)));
+            console.error(err);
+        } finally {
+            loading = false;
+            loadingStep = '';
+        }
     }
 </script>
 
@@ -255,7 +394,7 @@
         {#if loading}
             <div class="py-12" in:fade={{ duration: 200 }}>
                 <div class="animate-spin rounded-full h-12 w-12 border-2 border-gray-900 border-t-transparent mx-auto"></div>
-                <p class="mt-6 text-gray-700 font-medium animate-pulse">파일 분석 중...</p>
+                <p class="mt-6 text-gray-700 font-medium">{loadingStep || '파일 분석 중...'}</p>
                 <p class="mt-2 text-sm text-gray-600">두 개의 시트를 동시에 분석하고 있습니다</p>
             </div>
         {:else}
@@ -266,28 +405,50 @@
             <p class="text-sm text-gray-600 mb-6">
                 "개인별 출석현황"과 "원본데이터" 시트가 포함된 파일을 선택하세요
             </p>
-            <label class="inline-block px-6 py-3 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors cursor-pointer">
-                파일 선택
-                <input type="file" accept=".xlsx,.xls" onchange={handleFileSelect} class="hidden" />
-            </label>
+            <div class="flex items-center justify-center gap-3">
+                <label class="inline-block px-6 py-3 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors cursor-pointer">
+                    파일 선택
+                    <input type="file" accept=".xlsx,.xls" onchange={handleFileSelect} class="hidden" />
+                </label>
+                <FileHistory onLoadEntry={loadFromHistory} />
+            </div>
             <p class="mt-4 text-xs text-gray-500">또는 파일을 이 영역으로 드래그하세요</p>
         {/if}
 
         {#if error}
             <div
                 in:fly={{ y: -10, duration: 300 }}
-                class="mt-6 p-4 bg-red-50 border border-red-200 rounded"
+                class="mt-6 p-4 bg-red-50 border border-red-200 rounded flex items-start justify-between gap-3"
             >
                 <p class="text-sm text-red-700">{error}</p>
+                <button
+                    onclick={dismissError}
+                    class="text-red-500 hover:text-red-700 flex-shrink-0"
+                    aria-label="오류 메시지 닫기"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
             </div>
         {/if}
     </div>
 {:else}
     <!-- 결과 표시 영역 -->
     <div in:fade={{ duration: 300, delay: 100 }}>
-        <!-- 재업로드 버튼 -->
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-2xl font-medium text-gray-900">분석 결과</h2>
+        <!-- 헤더: 파일명 + 버튼들 -->
+        <div class="flex justify-between items-start mb-6">
+            <div>
+                <h2 class="text-2xl font-medium text-gray-900">분석 결과</h2>
+                {#if currentFileName}
+                    <p class="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        {currentFileName}
+                    </p>
+                {/if}
+            </div>
             <div class="flex gap-3">
                 {#if activeTab === 'attendance'}
                     <button
@@ -310,6 +471,7 @@
                         Excel 다운로드
                     </button>
                 {/if}
+                <FileHistory onLoadEntry={loadFromHistory} />
                 <button
                     onclick={resetAnalysis}
                     class="px-4 py-2 text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
@@ -341,36 +503,37 @@
             </div>
         </div>
 
-        <!-- 탭 콘텐츠 -->
-        {#key activeTab}
-            <div in:fade={{ duration: 300 }} out:fade={{ duration: 200 }}>
-                {#if activeTab === 'attendance' && attendanceResult}
-                    <AttendanceResults analysis={attendanceResult} />
-                {:else if activeTab === 'satisfaction' && satisfactionResult}
-                    <div class="space-y-6">
-                <!-- 분석 요약 -->
-                <div class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-                    <h3 class="text-lg font-medium text-gray-900 mb-4">분석 요약</h3>
-                    <div class="grid grid-cols-3 gap-6">
-                        <div class="hover:scale-105 transition-transform duration-200">
-                            <p class="text-sm text-gray-600">총 교육과목 수</p>
-                            <p class="text-2xl font-medium text-gray-900 mt-1">{satisfactionResult.totalSubjects}개</p>
-                        </div>
-                        <div class="hover:scale-105 transition-transform duration-200">
-                            <p class="text-sm text-gray-600">총 응답 수</p>
-                            <p class="text-2xl font-medium text-gray-900 mt-1">{satisfactionResult.totalResponses}건</p>
-                        </div>
-                        <div class="hover:scale-105 transition-transform duration-200">
-                            <p class="text-sm text-gray-600">분석 완료율</p>
-                            <p class="text-2xl font-medium text-gray-900 mt-1">100%</p>
+        <!-- 탭 콘텐츠 (DOM 유지로 스크롤 위치 보존) -->
+        <div class={activeTab === 'attendance' ? '' : 'hidden'}>
+            {#if attendanceResult}
+                <AttendanceResults analysis={attendanceResult} />
+            {/if}
+        </div>
+        <div class={activeTab === 'satisfaction' ? '' : 'hidden'}>
+            {#if satisfactionResult}
+                <div class="space-y-6">
+                    <!-- 분석 요약 -->
+                    <div class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">분석 요약</h3>
+                        <div class="grid grid-cols-3 gap-6">
+                            <div class="hover:scale-105 transition-transform duration-200">
+                                <p class="text-sm text-gray-600">총 교육과목 수</p>
+                                <p class="text-2xl font-medium text-gray-900 mt-1">{satisfactionResult.totalSubjects}개</p>
+                            </div>
+                            <div class="hover:scale-105 transition-transform duration-200">
+                                <p class="text-sm text-gray-600">총 응답 수</p>
+                                <p class="text-2xl font-medium text-gray-900 mt-1">{satisfactionResult.totalResponses}건</p>
+                            </div>
+                            <div class="hover:scale-105 transition-transform duration-200">
+                                <p class="text-sm text-gray-600">분석 완료율</p>
+                                <p class="text-2xl font-medium text-gray-900 mt-1">100%</p>
+                            </div>
                         </div>
                     </div>
+                    <SatisfactionResults results={satisfactionResult} />
                 </div>
-                <SatisfactionResults results={satisfactionResult} />
-                    </div>
-                {/if}
-            </div>
-        {/key}
+            {/if}
+        </div>
     </div>
 {/if}
 

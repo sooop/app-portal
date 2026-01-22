@@ -1,12 +1,31 @@
 <script>
     import { fade, scale } from 'svelte/transition';
     let {showModal = $bindable(false), subjectCompletionRates=$bindable(), handleCompletionRateChange} = $props();
+
+    // ESC 키로 모달 닫기
+    function handleKeydown(event) {
+        if (event.key === 'Escape') {
+            showModal = false;
+        }
+    }
+
+    // 배경 클릭 시 모달 닫기
+    function handleBackdropClick(event) {
+        if (event.target === event.currentTarget) {
+            showModal = false;
+        }
+    }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div
     in:fade={{ duration: 200 }}
     out:fade={{ duration: 150 }}
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    onclick={handleBackdropClick}
+    role="dialog"
+    aria-modal="true"
 >
         <div
             in:scale={{ duration: 200, start: 0.95 }}
