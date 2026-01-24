@@ -386,44 +386,44 @@
     <div
         in:fade={{ duration: 300 }}
         out:fade={{ duration: 200 }}
-        class="border-2 border-dashed rounded p-12 text-center transition-colors {isDragging ? 'border-gray-900 bg-gray-100' : 'border-gray-300 bg-white'}"
+        class="border-2 border-dashed rounded-lg p-12 text-center transition-all duration-200 {isDragging ? 'border-neutral-900 bg-neutral-50' : 'border-neutral-300 bg-white'}"
         ondrop={handleDrop}
         ondragover={handleDragOver}
         ondragleave={handleDragLeave}
     >
         {#if loading}
             <div class="py-12" in:fade={{ duration: 200 }}>
-                <div class="animate-spin rounded-full h-12 w-12 border-2 border-gray-900 border-t-transparent mx-auto"></div>
-                <p class="mt-6 text-gray-700 font-medium">{loadingStep || '파일 분석 중...'}</p>
-                <p class="mt-2 text-sm text-gray-600">두 개의 시트를 동시에 분석하고 있습니다</p>
+                <div class="animate-spin rounded-full h-11 w-11 border-2 border-neutral-900 border-t-transparent mx-auto"></div>
+                <p class="mt-5 text-neutral-800 font-medium text-md">{loadingStep || '파일 분석 중...'}</p>
+                <p class="mt-2 text-sm text-neutral-600">두 개의 시트를 동시에 분석하고 있습니다</p>
             </div>
         {:else}
-            <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+            <svg class="w-14 h-14 text-neutral-400 mx-auto mb-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
             </svg>
-            <h3 class="text-xl font-medium text-gray-900 mb-2">Excel 파일을 업로드하세요</h3>
-            <p class="text-sm text-gray-600 mb-6">
+            <h3 class="text-xl font-medium text-neutral-900 mb-2">Excel 파일을 업로드하세요</h3>
+            <p class="text-sm text-neutral-600 mb-7">
                 "개인별 출석현황"과 "원본데이터" 시트가 포함된 파일을 선택하세요
             </p>
             <div class="flex items-center justify-center gap-3">
-                <label class="inline-block px-6 py-3 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors cursor-pointer">
+                <label class="inline-flex items-center px-5 py-2.5 bg-neutral-900 text-white text-sm rounded hover:bg-neutral-800 transition-all duration-150 cursor-pointer">
                     파일 선택
                     <input type="file" accept=".xlsx,.xls" onchange={handleFileSelect} class="hidden" />
                 </label>
                 <FileHistory onLoadEntry={loadFromHistory} />
             </div>
-            <p class="mt-4 text-xs text-gray-500">또는 파일을 이 영역으로 드래그하세요</p>
+            <p class="mt-5 text-xs text-neutral-500">또는 파일을 이 영역으로 드래그하세요</p>
         {/if}
 
         {#if error}
             <div
                 in:fly={{ y: -10, duration: 300 }}
-                class="mt-6 p-4 bg-red-50 border border-red-200 rounded flex items-start justify-between gap-3"
+                class="mt-6 p-4 bg-red-50 border border-red-300 rounded-lg flex items-start justify-between gap-3"
             >
-                <p class="text-sm text-red-700">{error}</p>
+                <p class="text-sm text-red-800">{error}</p>
                 <button
                     onclick={dismissError}
-                    class="text-red-500 hover:text-red-700 flex-shrink-0"
+                    class="text-red-600 hover:text-red-800 flex-shrink-0 transition-colors"
                     aria-label="오류 메시지 닫기"
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -437,36 +437,36 @@
     <!-- 결과 표시 영역 -->
     <div in:fade={{ duration: 300, delay: 100 }}>
         <!-- 헤더: 파일명 + 버튼들 -->
-        <div class="flex justify-between items-start mb-6">
+        <div class="flex justify-between items-start mb-7">
             <div>
-                <h2 class="text-2xl font-medium text-gray-900">분석 결과</h2>
+                <h2 class="text-2xl font-medium text-neutral-900">분석 결과</h2>
                 {#if currentFileName}
-                    <p class="text-sm text-gray-500 mt-1 flex items-center gap-1">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <p class="text-sm text-neutral-600 mt-1.5 flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                         </svg>
                         {currentFileName}
                     </p>
                 {/if}
             </div>
-            <div class="flex gap-3">
+            <div class="flex gap-2.5">
                 {#if activeTab === 'attendance'}
                     <button
                         onclick={() => showModal = true}
-                        class="px-4 py-2 text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                        class="px-4 py-2 text-sm text-neutral-700 border border-neutral-300 rounded hover:bg-neutral-50 transition-all duration-150"
                     >
                         이수 조건 설정
                     </button>
                     <button
                         onclick={handleAttendanceDownload}
-                        class="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors"
+                        class="px-4 py-2 text-sm bg-neutral-900 text-white rounded hover:bg-neutral-800 transition-all duration-150"
                     >
                         Excel 다운로드
                     </button>
                 {:else if activeTab === 'satisfaction' && downloadUrl}
                     <button
                         onclick={handleSatisfactionDownload}
-                        class="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors"
+                        class="px-4 py-2 text-sm bg-neutral-900 text-white rounded hover:bg-neutral-800 transition-all duration-150"
                     >
                         Excel 다운로드
                     </button>
@@ -474,7 +474,7 @@
                 <FileHistory onLoadEntry={loadFromHistory} />
                 <button
                     onclick={resetAnalysis}
-                    class="px-4 py-2 text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                    class="px-4 py-2 text-sm text-neutral-700 border border-neutral-300 rounded hover:bg-neutral-50 transition-all duration-150"
                 >
                     새 파일 업로드
                 </button>
@@ -482,21 +482,21 @@
         </div>
 
         <!-- 탭 UI -->
-        <div class="border-b border-gray-300 mb-8">
-            <div class="flex">
+        <div class="border-b border-neutral-300 mb-8">
+            <div class="flex gap-1">
                 <button
                     onclick={() => activeTab = 'attendance'}
-                    class="px-6 py-3 text-sm font-medium border-b-2 transition-colors {activeTab === 'attendance'
-                        ? 'border-gray-900 text-gray-900'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'}"
+                    class="px-5 py-2.5 text-sm font-medium border-b-2 transition-all duration-150 {activeTab === 'attendance'
+                        ? 'border-neutral-900 text-neutral-900'
+                        : 'border-transparent text-neutral-600 hover:text-neutral-800 hover:border-neutral-400'}"
                 >
                     수강생 정보 분석
                 </button>
                 <button
                     onclick={() => activeTab = 'satisfaction'}
-                    class="px-6 py-3 text-sm font-medium border-b-2 transition-colors {activeTab === 'satisfaction'
-                        ? 'border-gray-900 text-gray-900'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'}"
+                    class="px-5 py-2.5 text-sm font-medium border-b-2 transition-all duration-150 {activeTab === 'satisfaction'
+                        ? 'border-neutral-900 text-neutral-900'
+                        : 'border-transparent text-neutral-600 hover:text-neutral-800 hover:border-neutral-400'}"
                 >
                     만족도 분석
                 </button>
@@ -511,22 +511,22 @@
         </div>
         <div class={activeTab === 'satisfaction' ? '' : 'hidden'}>
             {#if satisfactionResult}
-                <div class="space-y-6">
+                <div class="space-y-5">
                     <!-- 분석 요약 -->
-                    <div class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
-                        <h3 class="text-lg font-medium text-gray-900 mb-4">분석 요약</h3>
-                        <div class="grid grid-cols-3 gap-6">
-                            <div class="hover:scale-105 transition-transform duration-200">
-                                <p class="text-sm text-gray-600">총 교육과목 수</p>
-                                <p class="text-2xl font-medium text-gray-900 mt-1">{satisfactionResult.totalSubjects}개</p>
+                    <div class="bg-white rounded border border-neutral-200 p-6">
+                        <h3 class="text-md font-medium text-neutral-900 mb-5">분석 요약</h3>
+                        <div class="grid grid-cols-3 gap-8">
+                            <div>
+                                <p class="text-sm text-neutral-600">총 교육과목 수</p>
+                                <p class="text-2xl font-medium text-neutral-900 mt-1.5">{satisfactionResult.totalSubjects}개</p>
                             </div>
-                            <div class="hover:scale-105 transition-transform duration-200">
-                                <p class="text-sm text-gray-600">총 응답 수</p>
-                                <p class="text-2xl font-medium text-gray-900 mt-1">{satisfactionResult.totalResponses}건</p>
+                            <div>
+                                <p class="text-sm text-neutral-600">총 응답 수</p>
+                                <p class="text-2xl font-medium text-neutral-900 mt-1.5">{satisfactionResult.totalResponses}건</p>
                             </div>
-                            <div class="hover:scale-105 transition-transform duration-200">
-                                <p class="text-sm text-gray-600">분석 완료율</p>
-                                <p class="text-2xl font-medium text-gray-900 mt-1">100%</p>
+                            <div>
+                                <p class="text-sm text-neutral-600">분석 완료율</p>
+                                <p class="text-2xl font-medium text-neutral-900 mt-1.5">100%</p>
                             </div>
                         </div>
                     </div>
