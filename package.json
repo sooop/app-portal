@@ -22,7 +22,7 @@
 	},
 	"dependencies": {
 		"@tailwindcss/vite": "^4.1.12",
-		"exceljs": "^4.4.0",
+		"exceljs": "^3.4.0",
 		"pretendard": "^1.3.9",
 		"tailwindcss": "^4.1.12"
 	},

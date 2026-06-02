@@ -20,7 +20,7 @@ export async function handle({ event, resolve }) {
   // 'unsafe-inline'(style): Svelte 트랜지션이 사용하는 인라인 스타일에 필요
   const cspDirectives = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
