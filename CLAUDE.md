@@ -48,8 +48,7 @@ src/
 │   │   └── history-store.svelte.js     # Svelte 5 reactive store for history
 │   │
 │   ├── attendance-analyzer.js          # Attendance data processing logic
-│   ├── satisfaction-analyzer.js        # Satisfaction survey processing logic
-│   └── icons.js                        # SVG icon definitions
+│   └── satisfaction-analyzer.js        # Satisfaction survey processing logic
 │
 ├── hooks.server.js             # Security headers (CSP, X-Frame-Options, etc.)
 └── app.css                     # Tailwind imports

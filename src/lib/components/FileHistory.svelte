@@ -7,7 +7,8 @@
         getCurrentHistoryId,
         getIsLoading,
         switchToEntry,
-        removeEntry
+        removeEntry,
+        clearAllEntries
     } from '$lib/db/history-store.svelte.js';
 
     /** @type {{ onLoadEntry: (entry: any) => void }} */
@@ -17,6 +18,7 @@
     let searchQuery = $state('');
     let deleteConfirmId = $state(/** @type {string | null} */ (null));
     let loadingEntryId = $state(/** @type {string | null} */ (null));
+    let showClearAllConfirm = $state(false);
 
     // Get reactive values
     let historyList = $derived(getHistoryList());
@@ -41,6 +43,7 @@
         if (isOpen) {
             searchQuery = '';
             deleteConfirmId = null;
+            showClearAllConfirm = false;
         }
     }
 
@@ -48,6 +51,7 @@
         isOpen = false;
         searchQuery = '';
         deleteConfirmId = null;
+        showClearAllConfirm = false;
     }
 
     /**
@@ -102,8 +106,6 @@
      * @param {string} id
      */
     async function handleEntryClick(id) {
-        if (id === currentHistoryId) return;
-
         try {
             loadingEntryId = id;
             const entry = await switchToEntry(id);
@@ -151,6 +153,15 @@
         event.stopPropagation();
         deleteConfirmId = null;
     }
+
+    async function handleClearAll() {
+        try {
+            await clearAllEntries();
+            showClearAllConfirm = false;
+        } catch (err) {
+            console.error('Failed to clear all entries:', err);
+        }
+    }
 </script>
 
 <svelte:window onclick={handleClickOutside} onkeydown={handleKeydown} />
@@ -184,15 +195,43 @@
             <!-- Header -->
             <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-200">
                 <h3 class="text-sm font-medium text-neutral-900 whitespace-nowrap">파일 이력</h3>
-                <button
-                    onclick={closePopover}
-                    class="p-1 hover:bg-neutral-100 rounded transition-colors"
-                    aria-label="닫기"
-                >
-                    <svg class="w-4 h-4 text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
+                <div class="flex items-center gap-2">
+                    {#if historyList.length > 0}
+                        {#if showClearAllConfirm}
+                            <div class="flex items-center gap-2" in:fade={{ duration: 150 }}>
+                                <span class="text-xs text-neutral-700 whitespace-nowrap">전체 삭제할까요?</span>
+                                <button
+                                    onclick={handleClearAll}
+                                    class="text-xs text-red-600 hover:text-red-800 font-medium whitespace-nowrap"
+                                >
+                                    확인
+                                </button>
+                                <button
+                                    onclick={() => showClearAllConfirm = false}
+                                    class="text-xs text-neutral-500 hover:text-neutral-700 whitespace-nowrap"
+                                >
+                                    취소
+                                </button>
+                            </div>
+                        {:else}
+                            <button
+                                onclick={() => showClearAllConfirm = true}
+                                class="text-xs text-neutral-400 hover:text-red-600 transition-colors whitespace-nowrap"
+                            >
+                                전체 삭제
+                            </button>
+                        {/if}
+                    {/if}
+                    <button
+                        onclick={closePopover}
+                        class="p-1 hover:bg-neutral-100 rounded transition-colors"
+                        aria-label="닫기"
+                    >
+                        <svg class="w-4 h-4 text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <!-- Search -->

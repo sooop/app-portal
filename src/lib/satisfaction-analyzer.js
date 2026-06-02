@@ -61,7 +61,6 @@ function normalizeText(text, category) {
             if (cleanText.includes("30")) return "30대";
             if (cleanText.includes("40")) return "40대";
             if (cleanText.includes("50")) return "50대";
-            // 60대 이상으로 통일 (attendance-analyzer와 일관성 유지)
             if (
                 cleanText.includes("60") ||
                 cleanText.includes("70") ||
@@ -132,100 +131,19 @@ function normalizeText(text, category) {
     return text;
 }
 
-// Helper function to generate the Excel file and return a blob URL
-async function generateExcelFile(analysisResults, ExcelJS) {
-    if (!analysisResults || !ExcelJS) return null;
-
-    const workbook = new ExcelJS.Workbook();
-
-    // Sheet 1: Respondent Characteristics
-    const respondentSheet = workbook.addWorksheet("응답자 특성");
-    const respondentHeaders = [
-        "교육과목", "성별-남", "성별-여", "성별-합계",
-        ...Object.keys(regionMapping), "기타지역", "지역-합계",
-        "19세 이하", "20대", "30대", "40대", "50대", "60대 이상", "연령-합계",
-        "직장인", "자영업", "농어업축산임업", "주부", "학생", "기타", "직업-합계",
-    ];
-    respondentSheet.addRow(respondentHeaders);
-
-    Object.values(analysisResults.respondentCharacteristics).forEach(data => {
-        // subject가 객체일 경우 문자열로 변환
-        const subjectName = typeof data.subject === 'object' ? String(data.subject) : data.subject;
-        const row = [subjectName];
-        row.push(data.gender.남성, data.gender.여성, data.gender.남성 + data.gender.여성);
-        Object.keys(regionMapping).forEach(region => row.push(data.region[region] || 0));
-        row.push(data.region.기타지역);
-        row.push(Object.values(data.region).reduce((a, b) => a + b, 0));
-        Object.keys(data.age).forEach(age => row.push(data.age[age]));
-        row.push(Object.values(data.age).reduce((a, b) => a + b, 0));
-        Object.keys(data.job).forEach(job => row.push(data.job[job]));
-        row.push(Object.values(data.job).reduce((a, b) => a + b, 0));
-        respondentSheet.addRow(row);
-    });
-
-    const satisfactionSubjects = Object.keys(analysisResults.satisfactionAverages);
-
-    if (satisfactionSubjects.length > 0) {
-        // Sheet 2: Likert Scale Distribution
-        const distributionSheet = workbook.addWorksheet("객관식 응답 집계");
-        const satisfactionQuestions = Object.keys(analysisResults.satisfactionAverages[satisfactionSubjects[0]].scores).filter(q => q !== '전체');
-        const distributionHeaders = ["과목명"];
-        satisfactionQuestions.forEach(q => distributionHeaders.push(`${q}-매우그렇다`, `${q}-그렇다`, `${q}-보통`, `${q}-그렇지않다`, `${q}-매우그렇지않다`, `${q}-합계`));
-        distributionSheet.addRow(distributionHeaders);
-
-        Object.values(analysisResults.satisfactionDistribution).forEach(data => {
-            // subject가 객체일 경우 문자열로 변환
-            const subjectName = typeof data.subject === 'object' ? String(data.subject) : data.subject;
-            const row = [subjectName];
-            satisfactionQuestions.forEach(question => {
-                const questionData = data.questions[question];
-                if (questionData) {
-                    const values = [questionData["매우 그렇다"], questionData["그렇다"], questionData["보통"], questionData["그렇지 않다"], questionData["매우 그렇지 않다"]];
-                    row.push(...values, values.reduce((a, b) => a + b, 0));
-                } else {
-                    row.push(0, 0, 0, 0, 0, 0);
-                }
-            });
-            distributionSheet.addRow(row);
-        });
-
-        // Sheet 3: Average Satisfaction Scores
-        const averageSheet = workbook.addWorksheet("평균만족도");
-        const averageHeaders = ["과목명", "전체", ...satisfactionQuestions];
-        averageSheet.addRow(averageHeaders);
-
-        Object.values(analysisResults.satisfactionAverages).forEach(data => {
-            // subject가 객체일 경우 문자열로 변환
-            const subjectName = typeof data.subject === 'object' ? String(data.subject) : data.subject;
-            const row = [subjectName, data.scores["전체"]];
-            satisfactionQuestions.forEach(question => row.push(data.scores[question] || 0));
-            averageSheet.addRow(row);
-        });
-    }
-
-    // Generate Blob URL
-    const excelBuffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([excelBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    return URL.createObjectURL(blob);
-}
-
-
 // 상수 정의
 const MAX_ROWS = 100000;
 
 /**
- * Analyzes satisfaction survey data from an Excel file.
- * @param {Array<Object>} rawData - The raw data array from the Excel sheet.
- * @param {Object} ExcelJS - The ExcelJS library object.
- * @returns {Promise<Object>} A promise that resolves to an object containing analysis results and a download URL.
- * @note The download URL is a Blob URL that should be revoked using URL.revokeObjectURL() when no longer needed.
+ * 만족도 데이터를 분석하여 결과 객체를 반환합니다. (Excel 생성 없음)
+ * @param {Array<Object>} rawData - 원본데이터 시트에서 추출한 행 배열
+ * @returns {Object} 분석 결과 객체
  */
-export async function analyzeSatisfactionData(rawData, ExcelJS) {
+export function analyzeSatisfactionData(rawData) {
     if (!rawData || rawData.length === 0) {
         throw new Error("분석할 데이터가 없습니다.");
     }
 
-    // 데이터 크기 검증 (너무 큰 데이터 방지)
     if (rawData.length > MAX_ROWS) {
         throw new Error(`데이터가 너무 큽니다. 최대 ${MAX_ROWS.toLocaleString()}행까지 분석 가능합니다.`);
     }
@@ -243,13 +161,12 @@ export async function analyzeSatisfactionData(rawData, ExcelJS) {
         job: headers.findIndex(h => /직업|직종/i.test(h)),
     };
 
-    // 필수 열이 없는 경우 경고 (폴백으로 기존 인덱스 사용)
     if (columnIndexes.gender === -1) columnIndexes.gender = 4;
     if (columnIndexes.region === -1) columnIndexes.region = 5;
     if (columnIndexes.age === -1) columnIndexes.age = 6;
     if (columnIndexes.job === -1) columnIndexes.job = 7;
 
-    const questionPatterns = ["2-1.*적극", "2-2.*전문", "2-3.*충실", "2-4.*시간", "2-5.*활용", "2-6.*유익", "2-7.*교재", "2-8.*시설", "2-9.*만족"];
+    const questionPatterns = ["2-1.*적극", "2-2.*전문", "2-3.*충실", "2-4.*시간", "2-5.*활용", "2-6.*유익", "2-7.*교재", "2-8.*(시설|시섦|교육지원)", "2-9.*만족"];
     const satisfactionColumnIndexes = questionPatterns.map(pattern => {
         const regex = new RegExp(pattern, "i");
         return headers.findIndex(header => header && regex.test(header.toString()));
@@ -276,13 +193,17 @@ export async function analyzeSatisfactionData(rawData, ExcelJS) {
     const satisfactionAverages = {};
 
     for (const [subject, rows] of Object.entries(subjectGroups)) {
-        // Initialize structures
-        respondentCharacteristics[subject] = { subject, gender: { 남성: 0, 여성: 0 }, region: Object.fromEntries(Object.keys(regionMapping).map(k => [k, 0])), age: {"19세 이하":0, "20대":0, "30대":0, "40대":0, "50대":0, "60대 이상":0}, job: {"직장인":0, "자영업":0, "농어업축산임업":0, "주부":0, "학생":0, "기타":0} };
+        respondentCharacteristics[subject] = {
+            subject,
+            gender: { 남성: 0, 여성: 0 },
+            region: Object.fromEntries(Object.keys(regionMapping).map(k => [k, 0])),
+            age: { "19세 이하": 0, "20대": 0, "30대": 0, "40대": 0, "50대": 0, "60대 이상": 0 },
+            job: { "직장인": 0, "자영업": 0, "농어업축산임업": 0, "주부": 0, "학생": 0, "기타": 0 }
+        };
         respondentCharacteristics[subject].region['기타지역'] = 0;
         satisfactionDistribution[subject] = { subject, questions: {} };
         satisfactionAverages[subject] = { subject, scores: {} };
 
-        // Process rows
         rows.forEach(row => {
             const gender = normalizeText(row[headers[columnIndexes.gender]], "gender");
             if (gender) respondentCharacteristics[subject].gender[gender]++;
@@ -321,21 +242,174 @@ export async function analyzeSatisfactionData(rawData, ExcelJS) {
         });
 
         const questionScores = Object.values(satisfactionAverages[subject].scores).map(Number);
-        satisfactionAverages[subject].scores["전체"] = questionScores.length > 0 ? (questionScores.reduce((a, b) => a + b, 0) / questionScores.length).toFixed(2) : 0;
+        satisfactionAverages[subject].scores["전체"] = questionScores.length > 0
+            ? (questionScores.reduce((a, b) => a + b, 0) / questionScores.length).toFixed(2)
+            : 0;
     }
 
-    const analysisResults = {
+    return {
         respondentCharacteristics,
         satisfactionDistribution,
         satisfactionAverages,
         totalSubjects: Object.keys(subjectGroups).length,
         totalResponses: dataRows.length,
     };
+}
 
-    const url = await generateExcelFile(analysisResults, ExcelJS);
+/**
+ * 출석+만족도 통합 Excel 파일을 생성하고 Blob URL을 반환합니다.
+ * Sheet 1: 수강생 정보 분석 (출석)
+ * Sheet 2: 응답자 특성 (만족도)
+ * Sheet 3: 객관식 응답 집계 (만족도)
+ * Sheet 4: 평균만족도 (만족도)
+ * @param {any} satisfactionResults - analyzeSatisfactionData의 반환값
+ * @param {any} ExcelJS - ExcelJS 라이브러리 객체
+ * @param {Record<string,any> | null} [attendanceResults] - analyzeData의 반환값
+ * @returns {Promise<string | null>} Blob URL (사용 후 revokeObjectURL 필요)
+ */
+export async function generateCombinedExcel(satisfactionResults, ExcelJS, attendanceResults = null) {
+    if (!satisfactionResults || !ExcelJS) return null;
 
-    return {
-        results: analysisResults,
-        downloadUrl: url,
-    };
+    const workbook = new ExcelJS.Workbook();
+
+    // ── Sheet 1: 수강생 정보 분석 ──────────────────────────────────────────
+    if (attendanceResults) {
+        const sheet = workbook.addWorksheet("수강생 정보 분석");
+        const ar = /** @type {any} */ (attendanceResults);
+
+        /** @param {string} label */
+        const addSection = (label) => {
+            const row = sheet.addRow([label]);
+            row.font = { bold: true };
+        };
+        /** @param {(string|number)[]} cols */
+        const addHeader = (cols) => {
+            const row = sheet.addRow(cols);
+            row.font = { bold: true };
+        };
+
+        // 과목별 분석결과
+        addSection("과목별 분석결과");
+        addHeader(["과목명", "수강인원", "평균출석률(%)", "수료인원", "수료율(%)"]);
+        ar.subjectResults.forEach(/** @param {any} item */ item => {
+            sheet.addRow([
+                item.과목명,
+                item.수강인원,
+                Number((item.평균출석률 * 100).toFixed(1)),
+                item.수료인원,
+                Number((item.수료율 * 100).toFixed(1)),
+            ]);
+        });
+
+        sheet.addRow([]);
+
+        // 성별 분포
+        addSection("성별 분포");
+        addHeader(["성별", "명수", "비율(%)"]);
+        Object.entries(ar.genderDistribution).forEach(([gender, stats]) => {
+            const s = /** @type {any} */ (stats);
+            sheet.addRow([gender, s.명수, Number(s.비율.toFixed(1))]);
+        });
+
+        sheet.addRow([]);
+
+        // 수강 강좌수별 분포
+        addSection("수강 강좌수별 분포");
+        addHeader(["수강강좌수", "명수", "비율(%)"]);
+        Object.entries(ar.courseCountDistribution).forEach(([count, stats]) => {
+            const s = /** @type {any} */ (stats);
+            sheet.addRow([count, s.명수, Number(s.비율.toFixed(1))]);
+        });
+        sheet.addRow([`총 고유 수강생: ${ar.uniqueStudents}명`]);
+
+        sheet.addRow([]);
+
+        // 연령대별 분포
+        addSection("연령대별 분포");
+        addHeader(["연령대", "명수", "비율(%)"]);
+        Object.entries(ar.ageDistribution).forEach(([ageGroup, stats]) => {
+            const s = /** @type {any} */ (stats);
+            sheet.addRow([ageGroup, s.명수, Number(s.비율.toFixed(1))]);
+        });
+        sheet.addRow(["(강좌별 집계, 동일인 중복 포함)"]);
+
+        sheet.getColumn(1).width = 30;
+        sheet.getColumn(2).width = 12;
+        sheet.getColumn(3).width = 14;
+        sheet.getColumn(4).width = 12;
+        sheet.getColumn(5).width = 12;
+    }
+
+    // ── Sheet 2: 응답자 특성 ──────────────────────────────────────────────
+    const respondentSheet = workbook.addWorksheet("응답자 특성");
+    const respondentHeaders = [
+        "교육과목", "성별-남", "성별-여", "성별-합계",
+        ...Object.keys(regionMapping), "기타지역", "지역-합계",
+        "19세 이하", "20대", "30대", "40대", "50대", "60대 이상", "연령-합계",
+        "직장인", "자영업", "농어업축산임업", "주부", "학생", "기타", "직업-합계",
+    ];
+    respondentSheet.addRow(respondentHeaders);
+
+    Object.values(satisfactionResults.respondentCharacteristics).forEach(data => {
+        const d = /** @type {any} */ (data);
+        const subjectName = typeof d.subject === 'object' ? String(d.subject) : d.subject;
+        const row = [subjectName];
+        row.push(d.gender.남성, d.gender.여성, d.gender.남성 + d.gender.여성);
+        Object.keys(regionMapping).forEach(region => row.push(d.region[region] || 0));
+        row.push(d.region.기타지역);
+        row.push(Object.values(d.region).reduce((/** @type {number} */ a, /** @type {any} */ b) => a + b, 0));
+        Object.keys(d.age).forEach(age => row.push(d.age[age]));
+        row.push(Object.values(d.age).reduce((/** @type {number} */ a, /** @type {any} */ b) => a + b, 0));
+        Object.keys(d.job).forEach(job => row.push(d.job[job]));
+        row.push(Object.values(d.job).reduce((/** @type {number} */ a, /** @type {any} */ b) => a + b, 0));
+        respondentSheet.addRow(row);
+    });
+
+    const satisfactionSubjects = Object.keys(satisfactionResults.satisfactionAverages);
+
+    if (satisfactionSubjects.length > 0) {
+        // ── Sheet 3: 객관식 응답 집계 ─────────────────────────────────────
+        const distributionSheet = workbook.addWorksheet("객관식 응답 집계");
+        const satisfactionQuestions = Object.keys(
+            /** @type {any} */ (satisfactionResults.satisfactionAverages[satisfactionSubjects[0]]).scores
+        ).filter(q => q !== '전체');
+        const distributionHeaders = ["과목명"];
+        satisfactionQuestions.forEach(q =>
+            distributionHeaders.push(`${q}-매우그렇다`, `${q}-그렇다`, `${q}-보통`, `${q}-그렇지않다`, `${q}-매우그렇지않다`, `${q}-합계`)
+        );
+        distributionSheet.addRow(distributionHeaders);
+
+        Object.values(satisfactionResults.satisfactionDistribution).forEach(data => {
+            const d = /** @type {any} */ (data);
+            const subjectName = typeof d.subject === 'object' ? String(d.subject) : d.subject;
+            const row = [subjectName];
+            satisfactionQuestions.forEach(question => {
+                const qd = d.questions[question];
+                if (qd) {
+                    const values = [qd["매우 그렇다"], qd["그렇다"], qd["보통"], qd["그렇지 않다"], qd["매우 그렇지 않다"]];
+                    row.push(...values, values.reduce((a, b) => a + b, 0));
+                } else {
+                    row.push(0, 0, 0, 0, 0, 0);
+                }
+            });
+            distributionSheet.addRow(row);
+        });
+
+        // ── Sheet 4: 평균만족도 ───────────────────────────────────────────
+        const averageSheet = workbook.addWorksheet("평균만족도");
+        const averageHeaders = ["과목명", "전체", ...satisfactionQuestions];
+        averageSheet.addRow(averageHeaders);
+
+        Object.values(satisfactionResults.satisfactionAverages).forEach(data => {
+            const d = /** @type {any} */ (data);
+            const subjectName = typeof d.subject === 'object' ? String(d.subject) : d.subject;
+            const row = [subjectName, d.scores["전체"]];
+            satisfactionQuestions.forEach(question => row.push(d.scores[question] || 0));
+            averageSheet.addRow(row);
+        });
+    }
+
+    const excelBuffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([excelBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    return URL.createObjectURL(blob);
 }

@@ -7,7 +7,8 @@ import {
     saveFileHistory,
     getFileHistory,
     getFileHistorySummaryList,
-    deleteFileHistory
+    deleteFileHistory,
+    clearAllHistory
 } from './indexeddb.js';
 
 /**
@@ -128,11 +129,23 @@ export async function removeEntry(id) {
 }
 
 /**
- * Set current history ID without loading
- * @param {string | null} id
+ * Clear all history entries
+ * @returns {Promise<void>}
  */
-export function setCurrentHistoryId(id) {
-    currentHistoryId = id;
+export async function clearAllEntries() {
+    try {
+        isLoading = true;
+        error = null;
+        await clearAllHistory();
+        currentHistoryId = null;
+        historyList = [];
+    } catch (err) {
+        error = err instanceof Error ? err.message : String(err);
+        console.error('Failed to clear all entries:', err);
+        throw err;
+    } finally {
+        isLoading = false;
+    }
 }
 
 /**
@@ -164,12 +177,4 @@ export function getCurrentHistoryId() {
  */
 export function getIsLoading() {
     return isLoading;
-}
-
-/**
- * Get error state
- * @returns {string | null}
- */
-export function getError() {
-    return error;
 }

@@ -1,24 +1,41 @@
 /**
  * 나이를 계산하는 함수
  * @param {string | number} birthDate - 생년월일 (e.g., '1990.01.01' or '1990-01-01')
- * @returns {number} - 만 나이
+ * @returns {number | null} - 만 나이 (유효하지 않은 생년월일이면 null)
  */
 export function calculateAge(birthDate) {
-  if (!birthDate) return 0;
+  if (!birthDate) return null;
 
-  let dateStr = birthDate.toString();
-  let year, month, day;
+  const dateStr = birthDate.toString().trim();
+  let parts;
 
   if (dateStr.includes('.')) {
-    [year, month, day] = dateStr.split('.').map(Number);
+    parts = dateStr.split('.');
   } else if (dateStr.includes('-')) {
-    [year, month, day] = dateStr.split('-').map(Number);
+    parts = dateStr.split('-');
   } else {
-    return 0;
+    return null;
+  }
+
+  const [year, month, day] = parts.map(Number);
+
+  // 숫자 파싱 검증 (빈 값/문자 포함 시 NaN)
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+
+  const birth = new Date(year, month - 1, day);
+
+  // 존재하지 않는 날짜(예: 2024.02.30) 자동 보정 탐지
+  if (birth.getFullYear() !== year || birth.getMonth() !== month - 1 || birth.getDate() !== day) {
+    return null;
   }
 
   const today = new Date();
-  const birth = new Date(year, month - 1, day);
+
+  // 미래 생년월일 방지
+  if (birth > today) return null;
+
   let age = today.getFullYear() - birth.getFullYear();
 
   if (today.getMonth() < birth.getMonth() ||
@@ -153,6 +170,7 @@ export function analyzeData(data, subjectCompletionRates) {
 
   data.forEach(item => {
     const age = calculateAge(item.생년월일);
+    if (age === null) return; // 유효하지 않은 생년월일은 연령 집계에서 제외
     const ageGroup = getAgeGroup(age);
     ageStats[ageGroup]++;
   });
@@ -173,53 +191,4 @@ export function analyzeData(data, subjectCompletionRates) {
     totalStudents,
     uniqueStudents
   };
-}
-
-/**
- * 분석 결과를 엑셀 파일로 다운로드하는 함수
- * @param {Object} analysis - analyzeData 함수로부터 반환된 분석 결과 객체
- * @param {Object} ExcelJS - ExcelJS 라이브러리 객체
- */
-export async function downloadExcel(analysis, ExcelJS) {
-  if (!analysis || !ExcelJS) return;
-
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('과목별 분석결과');
-
-  // 헤더 설정
-  worksheet.columns = [
-    { header: '과목명', key: '과목명', width: 30 },
-    { header: '수강인원', key: '수강인원', width: 12 },
-    { header: '평균출석률', key: '평균출석률', width: 12 },
-    { header: '수료인원', key: '수료인원', width: 12 },
-    { header: '수료율', key: '수료율', width: 12 }
-  ];
-
-  // 과목별 결과 시트 데이터 추가
-  analysis.subjectResults.forEach(item => {
-    worksheet.addRow({
-      '과목명': item.과목명,
-      '수강인원': item.수강인원,
-      '평균출석률': Math.round(item.평균출석률 * 1000) / 10, // 소수점 1자리 %
-      '수료인원': item.수료인원,
-      '수료율': Math.round(item.수료율 * 1000) / 10 // 소수점 1자리 %
-    });
-  });
-
-  // 파일 다운로드 - 안전한 파일명 생성
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const safeFilename = `강좌분석결과_${year}-${month}-${day}.xlsx`;
-
-  // 버퍼로 변환 후 다운로드
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = safeFilename;
-  link.click();
-  URL.revokeObjectURL(url);
 }

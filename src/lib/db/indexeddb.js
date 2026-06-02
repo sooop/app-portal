@@ -169,21 +169,61 @@ export async function deleteFileHistory(id) {
 }
 
 /**
- * Enforce storage limit by removing oldest entries
+ * Enforce storage limit by removing oldest entries.
+ * count()로 개수만 조회하고, 초과분만 uploadedAt 인덱스 커서로 직접 삭제한다.
+ * (무거운 fileContent를 메모리에 로드하지 않으며, 단일 트랜잭션으로 처리)
  * @param {number} max - Maximum number of entries to keep
  * @returns {Promise<void>}
  */
 export async function enforceStorageLimit(max = MAX_ENTRIES) {
-    const entries = await getAllFileHistory();
+    const database = await getDB();
 
-    if (entries.length <= max) return;
+    // 1) 전체 개수만 조회 (값 역직렬화 없음)
+    const total = await new Promise((resolve, reject) => {
+        const transaction = database.transaction([STORE_NAME], 'readonly');
+        const request = transaction.objectStore(STORE_NAME).count();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(new Error('이력 개수 조회 실패: ' + request.error?.message));
+    });
 
-    // Remove oldest entries (entries are already sorted by uploadedAt desc)
-    const entriesToDelete = entries.slice(max);
+    if (total <= max) return;
 
-    for (const entry of entriesToDelete) {
-        await deleteFileHistory(entry.id);
-    }
+    // 2) 오래된 항목(uploadedAt 오름차순)부터 초과분만 커서로 직접 삭제
+    const removeCount = total - max;
+    await new Promise((resolve, reject) => {
+        const transaction = database.transaction([STORE_NAME], 'readwrite');
+        const index = transaction.objectStore(STORE_NAME).index('uploadedAt');
+        const request = index.openCursor(null, 'next'); // 오래된 것부터
+        let deleted = 0;
+
+        request.onsuccess = (event) => {
+            const cursor = /** @type {IDBRequest<IDBCursorWithValue>} */ (event.target).result;
+            if (cursor && deleted < removeCount) {
+                cursor.delete();
+                deleted++;
+                cursor.continue();
+            }
+        };
+        transaction.oncomplete = () => resolve(undefined);
+        transaction.onerror = () => reject(new Error('이력 정리 실패: ' + transaction.error?.message));
+    });
+}
+
+/**
+ * Clear all file history entries
+ * @returns {Promise<void>}
+ */
+export async function clearAllHistory() {
+    const database = await getDB();
+
+    return new Promise((resolve, reject) => {
+        const transaction = database.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.clear();
+
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(new Error('이력 전체 삭제 실패: ' + request.error?.message));
+    });
 }
 
 /**

@@ -15,10 +15,12 @@ export async function handle({ event, resolve }) {
   response.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
 
   // Content Security Policy
-  // Note: CDN에서 XLSX 라이브러리를 로드하므로 해당 도메인을 허용
+  // 모든 리소스(ExcelJS, Pretendard 폰트 등)를 npm 번들로 self-host하므로 외부 CDN을 허용하지 않는다.
+  // 'unsafe-inline'(script): SvelteKit 하이드레이션 부트스트랩 인라인 스크립트에 필요
+  // 'unsafe-inline'(style): Svelte 트랜지션이 사용하는 인라인 스타일에 필요
   const cspDirectives = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net",
+    "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",

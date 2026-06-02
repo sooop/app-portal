@@ -2,8 +2,8 @@
     import { fade, fly } from 'svelte/transition';
     import { onMount, onDestroy } from 'svelte';
     import ExcelJS from 'exceljs';
-    import { analyzeData, downloadExcel } from '$lib/attendance-analyzer.js';
-    import { analyzeSatisfactionData } from '$lib/satisfaction-analyzer.js';
+    import { analyzeData } from '$lib/attendance-analyzer.js';
+    import { analyzeSatisfactionData, generateCombinedExcel } from '$lib/satisfaction-analyzer.js';
     import AttendanceResults from './AttendanceResults.svelte';
     import SatisfactionResults from './SatisfactionResults.svelte';
     import CompletionRateModal from './CompletionRateModal.svelte';
@@ -11,7 +11,6 @@
     import {
         loadHistoryList,
         addToHistory,
-        setCurrentHistoryId,
         clearCurrentSelection
     } from '$lib/db/history-store.svelte.js';
 
@@ -20,9 +19,8 @@
         loadHistoryList();
     });
 
-    // 컴포넌트 언마운트 시 Blob URL 정리
+    // 컴포넌트 언마운트 시 타이머 정리
     onDestroy(() => {
-        cleanupDownloadUrl();
         if (errorTimeout) clearTimeout(errorTimeout);
     });
 
@@ -35,17 +33,23 @@
     let satisfactionResult = $state(null);
     let subjectCompletionRates = $state({});
     let showModal = $state(false);
-    let downloadUrl = $state('');
+    let isDownloading = $state(false);
     let isDragging = $state(false);
     let errorTimeout = $state(null); // 에러 자동 소멸 타이머
     let originalAttendanceData = $state(null); // 원본 출석 데이터 (재분석용)
     let satisfactionRawData = $state(null); // 만족도 원본 데이터 (이력 저장용)
+    let satisfactionAnalysisData = $state(null); // 만족도 분석 결과 (Excel 재생성용)
     let currentFileName = $state(''); // 현재 파일명
     let currentFileSize = $state(0); // 현재 파일 크기
     let currentFileContent = $state(null); // 현재 파일 ArrayBuffer
 
     // 파일 크기 제한: 50MB
     const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+    // 셀 값을 문자열로 변환 (RichText 포함)
+    function cellText(cell) {
+        return cell.text || (cell.value != null ? String(cell.value) : '');
+    }
 
     // Excel 데이터 추출 헬퍼 함수
     function extractSheetData(workbook, sheetName, headerHint) {
@@ -62,11 +66,11 @@
             if (dataStartRow !== -1) return; // 이미 찾았으면 종료
 
             row.eachCell((cell) => {
-                if (cell.value && cell.value.toString().includes(headerHint)) {
+                if (cellText(cell).includes(headerHint)) {
                     dataStartRow = rowNumber;
-                    // 헤더 행 저장
+                    // 헤더 행 저장 (RichText 처리)
                     row.eachCell((headerCell, colNumber) => {
-                        headers[colNumber - 1] = headerCell.value ? headerCell.value.toString() : '';
+                        headers[colNumber - 1] = cellText(headerCell);
                     });
                 }
             });
@@ -74,6 +78,25 @@
 
         if (dataStartRow === -1) {
             throw new Error(`'${sheetName}' 시트에서 '${headerHint}' 헤더를 찾을 수 없습니다.`);
+        }
+
+        // 중복 헤더가 있으면 이전 행(설명 행)의 값으로 대체
+        if (dataStartRow > 1) {
+            const seen = new Set();
+            const duplicates = new Set();
+            headers.forEach(h => {
+                if (h) { seen.has(h) ? duplicates.add(h) : seen.add(h); }
+            });
+            if (duplicates.size > 0) {
+                const descRow = worksheet.getRow(dataStartRow - 1);
+                const descHeaders = [];
+                descRow.eachCell((cell, colNumber) => {
+                    descHeaders[colNumber - 1] = cellText(cell);
+                });
+                headers = headers.map((h, i) =>
+                    (h && duplicates.has(h) && descHeaders[i]) ? descHeaders[i] : h
+                );
+            }
         }
 
         // 데이터 행 추출
@@ -110,27 +133,30 @@
         return data;
     }
 
-    // Blob URL cleanup 함수
-    function cleanupDownloadUrl() {
-        if (downloadUrl) {
-            URL.revokeObjectURL(downloadUrl);
-            downloadUrl = '';
-        }
+    // 숫자 셀 값을 안전하게 정수로 변환 ("12abc" 같은 부분 파싱 방지)
+    /** @param {unknown} value @returns {number} */
+    function toCount(value) {
+        const n = Number(String(value ?? '').trim());
+        return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
     }
 
     // 출석 데이터 구조화 함수
     function structureAttendanceData(rawData) {
-        return rawData.map(row => ({
-            연번: row['연번'],
-            과목명: row['과목명'],
-            이름: row['이름'],
-            성별: row['성별'],
-            생년월일: row['생년월일'],
-            수업일: parseInt(row['수업일']) || 0,
-            출석일: parseInt(row['출석일']) || 0,
-            출석률: (parseFloat(row['출석률']) || 0) / 100,
-            수료여부: row['수료여부']
-        })).filter(item => item.과목명 && item.이름);
+        return rawData.map(row => {
+            const 수업일 = toCount(row['수업일']);
+            const 출석일 = toCount(row['출석일']);
+            return {
+                연번: row['연번'],
+                과목명: row['과목명'],
+                이름: row['이름'],
+                성별: row['성별'],
+                생년월일: row['생년월일'],
+                수업일,
+                출석일,
+                출석률: 수업일 > 0 ? 출석일 / 수업일 : 0,
+                수료여부: row['수료여부']
+            };
+        }).filter(item => item.과목명 && item.이름);
     }
 
     // 과목별 기본 수료 기준 생성
@@ -167,7 +193,6 @@
         error = '';
         attendanceResult = null;
         satisfactionResult = null;
-        cleanupDownloadUrl(); // 이전 Blob URL 정리
 
         try {
             // 파일 크기 검증
@@ -188,10 +213,10 @@
             // 시트 찾기
             loadingStep = '시트 확인 중...';
             const attendanceSheetName = workbook.worksheets.find(ws =>
-                /(\d+\.)?개인별\s?출석현황/.test(ws.name)
+                /^(\d+\.\s*)?개인별\s?출석현황$/.test(ws.name.trim())
             )?.name;
             const satisfactionSheetName = workbook.worksheets.find(ws =>
-                /(\d+\.)?원본데이(?:터|타)/.test(ws.name)
+                /^(\d+\.\s*)?원본데이(?:터|타)$/.test(ws.name.trim())
             )?.name;
 
             if (!attendanceSheetName || !satisfactionSheetName) {
@@ -227,16 +252,14 @@
             originalAttendanceData = structuredAttendance;
             satisfactionRawData = extractedSatisfactionData;
 
-            // 병렬 분석
+            // 분석 실행 (Excel은 다운로드 시점에 지연 생성)
             loadingStep = '데이터 분석 중...';
-            const [attendance, satisfaction] = await Promise.all([
-                Promise.resolve(analyzeData(structuredAttendance, defaultRates)),
-                analyzeSatisfactionData(extractedSatisfactionData, ExcelJS)
-            ]);
+            const attendanceAnalysis = analyzeData(structuredAttendance, defaultRates);
+            const satResults = analyzeSatisfactionData(extractedSatisfactionData);
 
-            attendanceResult = attendance;
-            satisfactionResult = satisfaction.results;
-            downloadUrl = satisfaction.downloadUrl;
+            attendanceResult = attendanceAnalysis;
+            satisfactionResult = satResults;
+            satisfactionAnalysisData = satResults;
             activeTab = 'attendance'; // 첫 번째 탭 자동 선택
 
             // IndexedDB에 이력 저장
@@ -297,35 +320,38 @@
         subjectCompletionRates = {...subjectCompletionRates};
     }
 
-    // 수료 기준 변경 시 재분석
+    // 수료 기준 변경 시 출석 분석만 재계산 (Excel은 다운로드 시점에 생성)
     $effect(() => {
         if (originalAttendanceData && Object.keys(subjectCompletionRates).length > 0) {
-            // 원본 데이터로 재분석
             attendanceResult = analyzeData(originalAttendanceData, subjectCompletionRates);
         }
     });
 
-    // Excel 다운로드 핸들러
-    async function handleAttendanceDownload() {
-        if (attendanceResult) {
-            await downloadExcel(attendanceResult, ExcelJS);
-        }
-    }
-
-    function handleSatisfactionDownload() {
-        if (downloadUrl) {
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = '만족도_분석결과.xlsx';
-            link.click();
+    // 통합 Excel 다운로드 (클릭 시점에 생성 → 즉시 정리)
+    async function handleDownload() {
+        if (!satisfactionAnalysisData || !attendanceResult || isDownloading) return;
+        isDownloading = true;
+        try {
+            const url = await generateCombinedExcel(satisfactionAnalysisData, ExcelJS, attendanceResult);
+            if (url) {
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = '통합_분석결과.xlsx';
+                link.click();
+                URL.revokeObjectURL(url);
+            }
+        } catch (err) {
+            setError('Excel 생성 실패: ' + (err instanceof Error ? err.message : String(err)));
+        } finally {
+            isDownloading = false;
         }
     }
 
     // 파일 재업로드
     function resetAnalysis() {
-        cleanupDownloadUrl(); // Blob URL 정리
         attendanceResult = null;
         satisfactionResult = null;
+        satisfactionAnalysisData = null;
         originalAttendanceData = null;
         satisfactionRawData = null;
         subjectCompletionRates = {};
@@ -346,7 +372,6 @@
         error = '';
         attendanceResult = null;
         satisfactionResult = null;
-        cleanupDownloadUrl();
 
         try {
             // 파일 정보 복원
@@ -359,16 +384,14 @@
             satisfactionRawData = entry.satisfactionRawData;
             subjectCompletionRates = entry.subjectCompletionRates || createDefaultCompletionRates(entry.structuredAttendanceData);
 
-            // 분석 수행
+            // 분석 수행 (Excel은 다운로드 시점에 지연 생성)
             loadingStep = '데이터 분석 중...';
-            const [attendance, satisfaction] = await Promise.all([
-                Promise.resolve(analyzeData(originalAttendanceData, subjectCompletionRates)),
-                analyzeSatisfactionData(satisfactionRawData, ExcelJS)
-            ]);
+            const attendanceAnalysis = analyzeData(originalAttendanceData, subjectCompletionRates);
+            const satResults = analyzeSatisfactionData(satisfactionRawData);
 
-            attendanceResult = attendance;
-            satisfactionResult = satisfaction.results;
-            downloadUrl = satisfaction.downloadUrl;
+            attendanceResult = attendanceAnalysis;
+            satisfactionResult = satResults;
+            satisfactionAnalysisData = satResults;
             activeTab = 'attendance';
 
         } catch (err) {
@@ -457,18 +480,14 @@
                     >
                         이수 조건 설정
                     </button>
+                {/if}
+                {#if satisfactionResult && attendanceResult}
                     <button
-                        onclick={handleAttendanceDownload}
-                        class="px-4 py-2 text-sm bg-neutral-900 text-white rounded hover:bg-neutral-800 transition-all duration-150"
+                        onclick={handleDownload}
+                        disabled={isDownloading}
+                        class="px-4 py-2 text-sm bg-neutral-900 text-white rounded hover:bg-neutral-800 transition-all duration-150 disabled:opacity-60"
                     >
-                        Excel 다운로드
-                    </button>
-                {:else if activeTab === 'satisfaction' && downloadUrl}
-                    <button
-                        onclick={handleSatisfactionDownload}
-                        class="px-4 py-2 text-sm bg-neutral-900 text-white rounded hover:bg-neutral-800 transition-all duration-150"
-                    >
-                        Excel 다운로드
+                        {isDownloading ? 'Excel 생성 중...' : 'Excel 다운로드'}
                     </button>
                 {/if}
                 <FileHistory onLoadEntry={loadFromHistory} />
